@@ -120,6 +120,7 @@ class VoiceAssistantApp:
         self.tray.show()
         self.hotkey_mgr = HotkeyManager()
         self.current_task = "transcribe"
+        self.target_window_hwnd = None
 
         self._setup_ipc_server()
         self._connect_signals()
@@ -190,6 +191,16 @@ class VoiceAssistantApp:
     def start_recording(self, task: str = "transcribe"):
         if self.recorder.is_recording:
             return
+
+        # Запоминаем активное окно с курсором до изменения фокуса
+        try:
+            fg = ctypes.windll.user32.GetForegroundWindow()
+            mw_hwnd = int(self.main_window.winId()) if self.main_window else None
+            ov_hwnd = int(self.overlay.winId()) if self.overlay else None
+            if fg and fg not in (mw_hwnd, ov_hwnd):
+                self.target_window_hwnd = fg
+        except Exception:
+            self.target_window_hwnd = None
 
         self.current_task = task
         dev_idx = config.get("input_device_index", None)
@@ -268,7 +279,8 @@ class VoiceAssistantApp:
 
         if clean_text:
             # 1. Всегда помещаем в буфер обмена Windows и (если разрешено) делаем Ctrl+V
-            handle_recognized_text(clean_text)
+            handle_recognized_text(clean_text, target_hwnd=self.target_window_hwnd)
+            self.target_window_hwnd = None
 
             # 2. Звук успешного завершения
             play_success_sound()

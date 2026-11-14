@@ -94,4 +94,9 @@ def clean_speech_text(text: str, language: str = "ru") -> str:
     # Заглавные буквы в начале новых предложений: ". слово" -> ". Слово"
     cleaned = re.sub(r'([.!?]\s+)([а-яёa-z])', lambda m: m.group(1) + m.group(2).upper(), cleaned)
 
+    # Защита: если фильтрация вычистила фразу полностью (например состояла из "Ну, эээ"),
+    # возвращаем исходный текст, чтобы не потерять надиктованное сообщение
+    if not cleaned.strip() and text.strip():
+        return text.strip()
+
     return cleaned.strip()

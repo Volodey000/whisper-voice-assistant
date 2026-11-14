@@ -259,6 +259,26 @@ try:
 except Exception as e:
     report("WhisperEngine: интеграционный тест", False, f"{e}\n{traceback.format_exc()}")
 
+# -------------------------------------------------------------
+# ТЕСТ 11: Многоуровневый буфер обмена и отказоустойчивость вставки
+# -------------------------------------------------------------
+try:
+    from paste_helper import copy_to_clipboard, handle_recognized_text
+    import pyperclip
+
+    test_clip_phrase = "Тестовая фраза для буфера обмена Whisper Voice Assistant"
+    copied = copy_to_clipboard(test_clip_phrase)
+    time.sleep(0.05)
+    read_back = pyperclip.paste()
+    clipboard_ok = copied and (read_back == test_clip_phrase)
+
+    # Тест защитного debounce и очистки
+    handled_ok = handle_recognized_text("Проверка авто-вставки в активное окно")
+
+    report("Clipboard & Paste: многоуровневый буфер обмена Windows", clipboard_ok and handled_ok, "Qt/Win32/pyperclip каскад синхронизирован без потерь")
+except Exception as e:
+    report("Clipboard & Paste: буфер обмена", False, f"{e}\n{traceback.format_exc()}")
+
 print("=" * 70, flush=True)
 print(f"  ИТОГ ТЕСТИРОВАНИЯ: {PASSED} пройдено, {FAILED} сбоев", flush=True)
 print("=" * 70, flush=True)

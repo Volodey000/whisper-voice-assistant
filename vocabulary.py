@@ -58,7 +58,7 @@ def apply_custom_vocabulary(text: str) -> str:
         for src, tgt in sorted_replacements:
             s = str(src).strip()
             t = str(tgt).strip()
-            if not s or not t:
+            if not s or not t or '\ufffd' in s or '\ufffd' in t:
                 continue
             pat = rf'(?<!\w){re.escape(s)}(?!\w)'
             res = re.sub(pat, t, res, flags=re.IGNORECASE)
@@ -67,9 +67,12 @@ def apply_custom_vocabulary(text: str) -> str:
     hotwords = get_hotwords_list()
     sorted_hw = sorted(hotwords, key=len, reverse=True)
     for hw in sorted_hw:
-        if not hw:
+        if not hw or '\ufffd' in hw:
             continue
         pat = rf'(?<!\w){re.escape(hw)}(?!\w)'
         res = re.sub(pat, hw, res, flags=re.IGNORECASE)
+
+    if not res.strip() and text.strip():
+        return text.strip()
 
     return res
