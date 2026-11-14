@@ -1,0 +1,33 @@
+# Python & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Whisper Models (скачиваются автоматически при первом запуске)
+models/
+*.bin
+*.pt
+*.onnx
+
+# Пользовательские персональные данные и история распознаваний
+history.json
+config.json
+*.log
+crash.log
+
+# Временные файлы тестов и превью
+preview_*.png
+test_*.png
+scratch_*.py
+
+# Ярлыки Windows с локальными путями
+*.lnk
+Thumbs.db
+desktop.ini
