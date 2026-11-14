@@ -61,11 +61,13 @@ def resolve_settings(config_device: str, config_model: str, config_compute_type:
     elif config_device == "cuda" and not hw["has_cuda"]:
         # Защита от сбоя: если в конфиге был указан cuda, но запущен на ноутбуке без GPU
         resolved_device = "cpu"
+    elif config_device not in ("cuda", "cpu"):
+        resolved_device = hw["recommended_device"]
     else:
         resolved_device = config_device
 
     # Разрешение типа вычислений
-    if not config_compute_type or config_compute_type == "auto":
+    if not config_compute_type or config_compute_type == "auto" or config_compute_type not in ("float16", "int8", "float32"):
         resolved_compute_type = "float16" if resolved_device == "cuda" else "int8"
     else:
         resolved_compute_type = config_compute_type

@@ -1,5 +1,6 @@
 import sys
 import os
+import subprocess
 import ctypes
 
 # Гарантируем поддержку UTF-8 в консоли Windows
@@ -11,6 +12,64 @@ if sys.platform == "win32":
             sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
+
+# -------------------------------------------------------------
+# 0. Автоматическая проверка и самоинициализация виртуального окружения (.venv)
+# -------------------------------------------------------------
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+VENV_DIR = os.path.join(PROJECT_DIR, ".venv")
+VENV_PY = os.path.join(VENV_DIR, "Scripts", "python.exe")
+
+def _bootstrap_environment():
+    in_local_venv = os.path.abspath(sys.prefix).lower() == os.path.abspath(VENV_DIR).lower()
+
+    if not in_local_venv and os.environ.get("WHISPER_NO_VENV") != "1":
+        venv_ready = False
+        if os.path.exists(VENV_PY):
+            try:
+                res = subprocess.run([VENV_PY, "-c", "import sys"], capture_output=True)
+                if res.returncode == 0:
+                    venv_ready = True
+            except Exception:
+                venv_ready = False
+
+        if not venv_ready:
+            print("=" * 60)
+            print(" [Whisper Voice Assistant] Первоначальная настройка на новом ПК")
+            print("=" * 60)
+            print("[Инфо] Создание изолированного виртуального окружения .venv...")
+            try:
+                import venv
+                venv.create(VENV_DIR, with_pip=True)
+                venv_ready = True
+            except Exception as e:
+                print(f"[Предупреждение] Ошибка venv.create: {e}. Попытка через subprocess...")
+                try:
+                    subprocess.run([sys.executable, "-m", "venv", VENV_DIR], check=True)
+                    venv_ready = True
+                except Exception as e2:
+                    print(f"[Ошибка] Не удалось создать .venv: {e2}")
+
+        if venv_ready and os.path.exists(VENV_PY):
+            cmd = [VENV_PY, os.path.abspath(__file__)] + sys.argv[1:]
+            sys.exit(subprocess.call(cmd))
+
+    # Внутри .venv проверяем обязательные пакеты (включая torch) ДО импорта PyQt6
+    try:
+        from check_environment import check_missing_packages, install_packages, check_and_fix_audio_devices, ensure_app_icons_and_shortcut
+        missing = check_missing_packages()
+        if missing:
+            print("[Whisper Voice Assistant] Обнаружены недостающие компоненты. Автоматическая установка...")
+            ok = install_packages(missing)
+            if not ok:
+                print("[Whisper Voice Assistant] Ошибка: Не удалось установить зависимости.")
+                sys.exit(1)
+        check_and_fix_audio_devices()
+        ensure_app_icons_and_shortcut()
+    except Exception as e_check:
+        print(f"[Whisper Voice Assistant] Замечание предстартовой проверки: {e_check}")
+
+_bootstrap_environment()
 
 import traceback
 def _global_excepthook(exc_type, exc_value, exc_tb):

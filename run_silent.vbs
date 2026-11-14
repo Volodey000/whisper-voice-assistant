@@ -9,19 +9,19 @@ If Not fso.FileExists(pythonExe) Then
     pythonExe = currentDir & "\.venv\Scripts\python.exe"
 End If
 
-' Проверяем, существует ли .venv и работает ли python на текущем компьютере
+' Проверяем, существует ли .venv и установлены ли все ключевые пакеты (PyQt6, torch, faster_whisper)
 needsSetup = False
 If Not fso.FileExists(pythonExe) Then
     needsSetup = True
 Else
-    ' Быстрая проверка работоспособности виртуального окружения (код возврата)
-    ret = WshShell.Run("""" & pythonExe & """ -c ""import sys""", 0, True)
+    ' Быстрая проверка работоспособности виртуального окружения и ключевых компонентов
+    ret = WshShell.Run("""" & pythonExe & """ -c ""import sys, PyQt6, torch, faster_whisper""", 0, True)
     If ret <> 0 Then
         needsSetup = True
     End If
 End If
 
-' Если .venv отсутствует или скопирован с другого ПК — запускаем start_whisper.bat для самодиагностики
+' Если .venv отсутствует, поврежден или библиотеки еще не установлены — запускаем start_whisper.bat с видимым окном
 If needsSetup Then
     WshShell.Run """" & currentDir & "\start_whisper.bat""", 1, False
     WScript.Quit
