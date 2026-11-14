@@ -149,6 +149,18 @@ class WhisperEngine:
             extra_kwargs["language_detection_segments"] = 1
             extra_kwargs["language_detection_threshold"] = 0.45
 
+        # Пользовательский словарь и подсказки горячих слов (Hotwords / Initial Prompt)
+        if config.get("custom_vocabulary_enabled", True):
+            try:
+                from vocabulary import get_hotwords_prompt
+                hw_str, init_prompt = get_hotwords_prompt()
+                if hw_str:
+                    extra_kwargs["hotwords"] = hw_str
+                if init_prompt:
+                    extra_kwargs["initial_prompt"] = init_prompt
+            except Exception as e_voc:
+                print(f"[WhisperEngine] Предупреждение словаря: {e_voc}")
+
         segments, info = model.transcribe(
             audio_data,
             language=lang_param,
@@ -187,12 +199,25 @@ class WhisperEngine:
         vad_enabled = config.get("vad_filter", True)
         vad_params = dict(min_silence_duration_ms=450, speech_pad_ms=250) if vad_enabled else None
 
+        extra_kwargs = {}
+        if config.get("custom_vocabulary_enabled", True):
+            try:
+                from vocabulary import get_hotwords_prompt
+                hw_str, init_prompt = get_hotwords_prompt()
+                if hw_str:
+                    extra_kwargs["hotwords"] = hw_str
+                if init_prompt:
+                    extra_kwargs["initial_prompt"] = init_prompt
+            except Exception as e_voc:
+                print(f"[WhisperEngine] Предупреждение словаря: {e_voc}")
+
         segments, info = model.transcribe(
             file_path,
             language=lang_param,
             beam_size=5,
             vad_filter=vad_enabled,
-            vad_parameters=vad_params
+            vad_parameters=vad_params,
+            **extra_kwargs
         )
 
         result_segments = []

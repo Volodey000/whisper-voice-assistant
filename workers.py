@@ -27,6 +27,14 @@ class LiveTranscriptionWorker(QThread):
                 eff_lang = "en" if self.task == "translate" else detected_lang
                 text = clean_speech_text(text, language=eff_lang)
 
+            # Пользовательский словарь автозамен и выравнивание регистра горячих слов
+            if config.get("custom_vocabulary_enabled", True):
+                try:
+                    from vocabulary import apply_custom_vocabulary
+                    text = apply_custom_vocabulary(text)
+                except Exception as e_voc:
+                    print(f"[Worker] Ошибка применения словаря: {e_voc}")
+
             self.finished_signal.emit(text, detected_lang, self.duration, self.task)
         except Exception as e:
             self.error_signal.emit(str(e))
@@ -51,6 +59,17 @@ class FileTranscriptionWorker(QThread):
                 language=self.language,
                 progress_callback=on_progress
             )
+
+            # Пользовательский словарь автозамен и выравнивание регистра горячих слов
+            if config.get("custom_vocabulary_enabled", True):
+                try:
+                    from vocabulary import apply_custom_vocabulary
+                    full_text = apply_custom_vocabulary(full_text)
+                    for seg in segments:
+                        seg["text"] = apply_custom_vocabulary(seg["text"])
+                except Exception as e_voc:
+                    print(f"[Worker] Ошибка применения словаря: {e_voc}")
+
             self.finished_signal.emit(full_text, segments, lang)
         except Exception as e:
             self.error_signal.emit(str(e))

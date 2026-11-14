@@ -15,6 +15,7 @@ from PyQt6.QtGui import QFont, QIcon, QColor
 from config import config
 from icons import get_app_icon, get_tray_minimize_icon, get_play_icon, get_stop_icon
 from waveform import WaveformVisualizer
+from vocabulary import DEFAULT_HOTWORDS, DEFAULT_REPLACEMENTS
 from console_manager import set_console_visible, is_console_visible
 from history_manager import history
 from paste_helper import copy_to_clipboard
@@ -342,10 +343,12 @@ class MainWindow(QMainWindow):
         # Вкладки (Tabs)
         self.tabs = QTabWidget(self)
         self.tab_dictation = self._wrap_in_scroll_area(self._create_dictation_tab())
+        self.tab_vocabulary = self._wrap_in_scroll_area(self._create_vocabulary_tab())
         self.tab_files = self._wrap_in_scroll_area(self._create_files_tab())
         self.tab_settings = self._wrap_in_scroll_area(self._create_settings_tab())
 
         self.tabs.addTab(self.tab_dictation, "Диктовка")
+        self.tabs.addTab(self.tab_vocabulary, "Словарь")
         self.tabs.addTab(self.tab_files, "Файлы")
         self.tabs.addTab(self.tab_settings, "Настройки")
 
@@ -487,7 +490,190 @@ class MainWindow(QMainWindow):
         layout.addWidget(hist_group, 2)
         return w
 
-    # ------------------ Вкладка 2: Файлы ------------------
+    # ------------------ Вкладка 2: Словарь ------------------
+    def _create_vocabulary_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+
+        # 1. Главный блок включения словаря
+        top_group = QGroupBox("Пользовательский словарь терминов и подсказки для Whisper")
+        top_layout = QVBoxLayout(top_group)
+        top_layout.setSpacing(6)
+
+        self.chk_vocab_enabled = QCheckBox("Использовать словарь горячих слов и автозамен", self)
+        self.chk_vocab_enabled.setFont(QFont("Segoe UI", 11, QFont.Weight.Medium))
+        self.chk_vocab_enabled.toggled.connect(self._on_vocab_toggle)
+        top_layout.addWidget(self.chk_vocab_enabled)
+
+        lbl_desc = QLabel(
+            "Нейросеть Whisper предварительно обучается вашим терминам через контекстные механизмы hotwords и initial_prompt. "
+            "Это обеспечивает 100% точность распознавания профессионального сленга, аббревиатур, брендов, кода и фамилий в правильном регистре букв.",
+            self
+        )
+        lbl_desc.setWordWrap(True)
+        lbl_desc.setStyleSheet("color: #71717a; font-size: 12px; line-height: 1.4;")
+        top_layout.addWidget(lbl_desc)
+        layout.addWidget(top_group)
+
+        # 2. Блок горячих слов
+        hw_group = QGroupBox("Горячие слова и ключевые термины (Hotwords)")
+        hw_layout = QVBoxLayout(hw_group)
+        hw_layout.setSpacing(6)
+
+        hw_hint = QLabel(
+            "Введите список терминов через запятую или с новой строки. Модель Whisper получит их как приоритетную контекстную подсказку перед началом декодирования речи:",
+            self
+        )
+        hw_hint.setWordWrap(True)
+        hw_hint.setStyleSheet("color: #52525b; font-size: 11px;")
+        hw_layout.addWidget(hw_hint)
+
+        self.txt_hotwords = QTextEdit(self)
+        self.txt_hotwords.setPlaceholderText("Пример: Kubernetes, PostgreSQL, FastAPI, Docker, Python, PyQt6, Faster-Whisper, Antigravity, Figma, GitHub, Битрикс24")
+        self.txt_hotwords.setMinimumHeight(65)
+        self.txt_hotwords.setMaximumHeight(90)
+        self.txt_hotwords.setFont(QFont("Segoe UI", 11))
+        hw_layout.addWidget(self.txt_hotwords)
+        layout.addWidget(hw_group)
+
+        # 3. Блок автозамен и сокращений
+        repl_group = QGroupBox("Словарь автозамен (как произносится → как писать)")
+        repl_layout = QVBoxLayout(repl_group)
+        repl_layout.setSpacing(8)
+
+        repl_hint = QLabel(
+            "Мгновенная замена созвучных слов, сокращений и разговорного сленга на правильные термины при вставке:",
+            self
+        )
+        repl_hint.setStyleSheet("color: #52525b; font-size: 11px;")
+        repl_layout.addWidget(repl_hint)
+
+        self.table_replacements = QTableWidget(self)
+        self.table_replacements.setColumnCount(2)
+        self.table_replacements.setHorizontalHeaderLabels(["Что услышано / Сленг", "Правильное написание / Замена"])
+        self.table_replacements.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_replacements.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table_replacements.setMinimumHeight(130)
+        self.table_replacements.setMaximumHeight(220)
+        repl_layout.addWidget(self.table_replacements)
+
+        btn_row = QHBoxLayout()
+        self.btn_add_repl = QPushButton("+ Добавить слово", self)
+        self.btn_add_repl.clicked.connect(lambda: self._add_replacement_row())
+        self.btn_del_repl = QPushButton("Удалить выбранное", self)
+        self.btn_del_repl.clicked.connect(self._delete_selected_replacement)
+        self.btn_reset_repl = QPushButton("Сбросить к образцу", self)
+        self.btn_reset_repl.clicked.connect(self._reset_vocabulary_to_defaults)
+
+        btn_row.addWidget(self.btn_add_repl)
+        btn_row.addWidget(self.btn_del_repl)
+        btn_row.addStretch()
+        btn_row.addWidget(self.btn_reset_repl)
+        repl_layout.addLayout(btn_row)
+        layout.addWidget(repl_group)
+
+        # 4. Панель сохранения
+        save_row = QHBoxLayout()
+        self.btn_save_vocab = QPushButton("Сохранить словарь", self)
+        self.btn_save_vocab.setObjectName("primaryBtn")
+        self.btn_save_vocab.setFixedHeight(38)
+        self.btn_save_vocab.setFont(QFont("Segoe UI", 12, QFont.Weight.Medium))
+        self.btn_save_vocab.clicked.connect(self._save_vocabulary)
+        save_row.addWidget(self.btn_save_vocab, 2)
+
+        self.lbl_vocab_status = QLabel("", self)
+        self.lbl_vocab_status.setStyleSheet("color: #059669; font-size: 12px; font-weight: 500;")
+        save_row.addWidget(self.lbl_vocab_status, 3)
+        layout.addLayout(save_row)
+
+        layout.addStretch()
+        return w
+
+    def _on_vocab_toggle(self, checked: bool):
+        if hasattr(self, 'chk_vocab_in_settings') and self.chk_vocab_in_settings.isChecked() != checked:
+            self.chk_vocab_in_settings.setChecked(checked)
+
+    def _add_replacement_row(self, src: str = "", tgt: str = ""):
+        row = self.table_replacements.rowCount()
+        self.table_replacements.insertRow(row)
+        item_src = QTableWidgetItem(src)
+        item_tgt = QTableWidgetItem(tgt)
+        self.table_replacements.setItem(row, 0, item_src)
+        self.table_replacements.setItem(row, 1, item_tgt)
+        self.table_replacements.setCurrentItem(item_src)
+        self.table_replacements.editItem(item_src)
+
+    def _delete_selected_replacement(self):
+        selected_rows = sorted(set(idx.row() for idx in self.table_replacements.selectedIndexes()), reverse=True)
+        for r in selected_rows:
+            self.table_replacements.removeRow(r)
+
+    def _reset_vocabulary_to_defaults(self):
+        reply = QMessageBox.question(
+            self,
+            "Сброс словаря",
+            "Вернуть список горячих слов и словарь автозамен к рекомендуемым начальным значениям?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.chk_vocab_enabled.setChecked(True)
+            self.txt_hotwords.setPlainText(DEFAULT_HOTWORDS)
+            self._populate_replacements_table(DEFAULT_REPLACEMENTS)
+            self._save_vocabulary()
+
+    def _populate_replacements_table(self, repl_dict: dict):
+        self.table_replacements.setRowCount(0)
+        for src, tgt in repl_dict.items():
+            row = self.table_replacements.rowCount()
+            self.table_replacements.insertRow(row)
+            self.table_replacements.setItem(row, 0, QTableWidgetItem(str(src)))
+            self.table_replacements.setItem(row, 1, QTableWidgetItem(str(tgt)))
+
+    def _load_vocabulary_ui(self):
+        enabled = config.get("custom_vocabulary_enabled", True)
+        if hasattr(self, 'chk_vocab_enabled'):
+            self.chk_vocab_enabled.setChecked(enabled)
+        if hasattr(self, 'chk_vocab_in_settings'):
+            self.chk_vocab_in_settings.setChecked(enabled)
+
+        hw = config.get("hotwords", DEFAULT_HOTWORDS)
+        if isinstance(hw, list):
+            hw = ", ".join(hw)
+        if hasattr(self, 'txt_hotwords'):
+            self.txt_hotwords.setPlainText(str(hw))
+
+        repl = config.get("replacements", DEFAULT_REPLACEMENTS)
+        if not isinstance(repl, dict):
+            repl = DEFAULT_REPLACEMENTS
+        if hasattr(self, 'table_replacements'):
+            self._populate_replacements_table(repl)
+
+    def _save_vocabulary(self):
+        enabled = self.chk_vocab_enabled.isChecked()
+        config.set("custom_vocabulary_enabled", enabled)
+        if hasattr(self, 'chk_vocab_in_settings'):
+            self.chk_vocab_in_settings.setChecked(enabled)
+
+        hw_text = self.txt_hotwords.toPlainText().strip()
+        config.set("hotwords", hw_text)
+
+        replacements = {}
+        for r in range(self.table_replacements.rowCount()):
+            item_src = self.table_replacements.item(r, 0)
+            item_tgt = self.table_replacements.item(r, 1)
+            if item_src and item_tgt:
+                s = item_src.text().strip()
+                t = item_tgt.text().strip()
+                if s and t:
+                    replacements[s] = t
+
+        config.set("replacements", replacements)
+        self.lbl_vocab_status.setText("Словарь сохранен и применен!")
+        QTimer.singleShot(2500, lambda: self.lbl_vocab_status.setText(""))
+
+    # ------------------ Вкладка 3: Файлы ------------------
     def _create_files_tab(self):
         w = QWidget()
         layout = QVBoxLayout(w)
@@ -663,6 +849,10 @@ class MainWindow(QMainWindow):
         self.chk_clean_fillers = QCheckBox("Очищать слова-паразиты, междометия и заикания (э-э, ну, повторы)", self)
         b_layout.addWidget(self.chk_clean_fillers)
 
+        self.chk_vocab_in_settings = QCheckBox("Пользовательский словарь и горячие слова (вкладка «Словарь»)", self)
+        self.chk_vocab_in_settings.toggled.connect(self._on_settings_vocab_toggle)
+        b_layout.addWidget(self.chk_vocab_in_settings)
+
         sound_row = QHBoxLayout()
         sound_row.addWidget(QLabel("Звуковые эффекты:"))
         self.cmb_sound_theme = QComboBox(self)
@@ -806,6 +996,9 @@ class MainWindow(QMainWindow):
 
         self.chk_auto_paste.setChecked(config.get("auto_paste", True))
         self.chk_clean_fillers.setChecked(config.get("clean_fillers", True))
+        voc_enabled = config.get("custom_vocabulary_enabled", True)
+        self.chk_vocab_in_settings.setChecked(voc_enabled)
+        self._load_vocabulary_ui()
 
         cur_sound = config.get("sound_theme", "hifi")
         if not config.get("play_sounds", True):
@@ -855,6 +1048,7 @@ class MainWindow(QMainWindow):
         new_fast_lang = self.chk_fast_lang.isChecked()
         new_vad = self.chk_vad.isChecked()
         new_clean_fillers = self.chk_clean_fillers.isChecked()
+        new_vocab_enabled = self.chk_vocab_in_settings.isChecked()
         new_paste = self.chk_auto_paste.isChecked()
         new_sound_theme = self.cmb_sound_theme.currentData()
         new_sounds = (new_sound_theme != "off")
@@ -874,6 +1068,9 @@ class MainWindow(QMainWindow):
         config.set("fast_lang_detect", new_fast_lang)
         config.set("vad_filter", new_vad)
         config.set("clean_fillers", new_clean_fillers)
+        config.set("custom_vocabulary_enabled", new_vocab_enabled)
+        if hasattr(self, 'chk_vocab_enabled'):
+            self.chk_vocab_enabled.setChecked(new_vocab_enabled)
         config.set("auto_paste", new_paste)
         config.set("sound_theme", new_sound_theme)
         config.set("play_sounds", new_sounds)
@@ -897,6 +1094,10 @@ class MainWindow(QMainWindow):
     def _on_console_toggled(self, checked: bool):
         set_console_visible(checked)
         config.set("show_console", checked)
+
+    def _on_settings_vocab_toggle(self, checked: bool):
+        if hasattr(self, 'chk_vocab_enabled') and self.chk_vocab_enabled.isChecked() != checked:
+            self.chk_vocab_enabled.setChecked(checked)
 
     def set_recording_state(self, is_recording: bool, task: str = "transcribe"):
         if is_recording:

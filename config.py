@@ -8,6 +8,20 @@ DEFAULT_CONFIG = {
     "translate_hotkey": "alt+`",      # Горячая клавиша мгновенного перевода на английский (RU -> EN)
     "hotkey_mode": "toggle",          # "toggle" (нажать для старта/стопа) или "hold" (удерживать при речи)
     "clean_fillers": True,            # Очистка слов-паразитов, междометий и заиканий (э-э, ну, повторы)
+    "custom_vocabulary_enabled": True,# Пользовательский словарь и подсказки горячих слов
+    "hotwords": "Kubernetes, PostgreSQL, Docker, FastAPI, Python, PyQt6, Faster-Whisper, Antigravity, Figma, GitHub, Битрикс24",
+    "replacements": {
+        "кубер": "Kubernetes",
+        "кубернетес": "Kubernetes",
+        "постгрес": "PostgreSQL",
+        "постгрис": "PostgreSQL",
+        "фастапи": "FastAPI",
+        "гпт": "GPT-4o",
+        "питон": "Python",
+        "пайтон": "Python",
+        "докер": "Docker",
+        "вискарь": "Whisper"
+    },
     "model_name": "auto",             # "auto" (автовыбор: GPU -> large-v3-turbo, CPU/ноутбук -> small), "large-v3-turbo", "medium", "small", "base"
     "language": "auto",               # "auto", "ru", "en"
     "device": "auto",                 # "auto" (автовыбор: cuda или cpu), "cuda", "cpu"
