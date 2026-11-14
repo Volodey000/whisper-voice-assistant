@@ -5,7 +5,7 @@ import sounddevice as sd
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-    QPushButton, QLabel, QTextEdit, QComboBox, QCheckBox,
+    QPushButton, QLabel, QTextEdit, QLineEdit, QComboBox, QCheckBox,
     QProgressBar, QFileDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QGroupBox, QRadioButton, QButtonGroup,
     QFrame, QScrollArea, QApplication
@@ -141,8 +141,8 @@ QPushButton#recordBtnActive:pressed {
     background-color: #b91c1c;
 }
 
-/* Текстовые поля и таблицы */
-QTextEdit, QTableWidget {
+/* Текстовые поля, строки ввода и таблицы */
+QLineEdit, QTextEdit, QTableWidget {
     background-color: #ffffff;
     border: 1px solid #e4e4e7;
     border-radius: 6px;
@@ -152,7 +152,7 @@ QTextEdit, QTableWidget {
     selection-color: #09090b;
     line-height: 1.5;
 }
-QTextEdit:focus, QTableWidget:focus {
+QLineEdit:focus, QTextEdit:focus, QTableWidget:focus {
     border-color: #71717a;
 }
 
@@ -550,6 +550,21 @@ class MainWindow(QMainWindow):
         repl_hint.setStyleSheet("color: #52525b; font-size: 11px;")
         repl_layout.addWidget(repl_hint)
 
+        # Строка быстрого поиска по обоим столбцам таблицы
+        search_row = QHBoxLayout()
+        search_row.setSpacing(8)
+        self.txt_repl_search = QLineEdit(self)
+        self.txt_repl_search.setPlaceholderText("Быстрый поиск по обоим столбцам (по сленгу или замене)...")
+        self.txt_repl_search.setClearButtonEnabled(True)
+        self.txt_repl_search.setFixedHeight(34)
+        self.txt_repl_search.textChanged.connect(self._filter_replacements)
+        search_row.addWidget(self.txt_repl_search, 1)
+
+        self.lbl_search_count = QLabel("Всего записей: 0", self)
+        self.lbl_search_count.setStyleSheet("color: #71717a; font-size: 12px; font-weight: 500; padding-right: 4px;")
+        search_row.addWidget(self.lbl_search_count, 0)
+        repl_layout.addLayout(search_row)
+
         self.table_replacements = QTableWidget(self)
         self.table_replacements.setColumnCount(2)
         self.table_replacements.setHorizontalHeaderLabels(["Что услышано / Сленг", "Правильное написание / Замена"])
@@ -595,20 +610,49 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'chk_vocab_in_settings') and self.chk_vocab_in_settings.isChecked() != checked:
             self.chk_vocab_in_settings.setChecked(checked)
 
+    def _filter_replacements(self, query: str = ""):
+        """Фильтрует строки таблицы автозамен по совпадению в любом из двух столбцов."""
+        q = query.strip().lower()
+        total_rows = self.table_replacements.rowCount()
+        visible_rows = 0
+
+        for r in range(total_rows):
+            item_src = self.table_replacements.item(r, 0)
+            item_tgt = self.table_replacements.item(r, 1)
+            src_val = item_src.text().lower() if item_src else ""
+            tgt_val = item_tgt.text().lower() if item_tgt else ""
+
+            match = (not q) or (q in src_val) or (q in tgt_val)
+            self.table_replacements.setRowHidden(r, not match)
+            if match:
+                visible_rows += 1
+
+        if hasattr(self, 'lbl_search_count'):
+            if q:
+                self.lbl_search_count.setText(f"Найдено: {visible_rows} из {total_rows}")
+            else:
+                self.lbl_search_count.setText(f"Всего записей: {total_rows}")
+
     def _add_replacement_row(self, src: str = "", tgt: str = ""):
+        if hasattr(self, 'txt_repl_search') and self.txt_repl_search.text():
+            self.txt_repl_search.clear()
+
         row = self.table_replacements.rowCount()
         self.table_replacements.insertRow(row)
+        self.table_replacements.setRowHidden(row, False)
         item_src = QTableWidgetItem(src)
         item_tgt = QTableWidgetItem(tgt)
         self.table_replacements.setItem(row, 0, item_src)
         self.table_replacements.setItem(row, 1, item_tgt)
         self.table_replacements.setCurrentItem(item_src)
         self.table_replacements.editItem(item_src)
+        self._filter_replacements(self.txt_repl_search.text() if hasattr(self, 'txt_repl_search') else "")
 
     def _delete_selected_replacement(self):
         selected_rows = sorted(set(idx.row() for idx in self.table_replacements.selectedIndexes()), reverse=True)
         for r in selected_rows:
             self.table_replacements.removeRow(r)
+        self._filter_replacements(self.txt_repl_search.text() if hasattr(self, 'txt_repl_search') else "")
 
     def _reset_vocabulary_to_defaults(self):
         reply = QMessageBox.question(
@@ -618,6 +662,8 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
+            if hasattr(self, 'txt_repl_search'):
+                self.txt_repl_search.clear()
             self.chk_vocab_enabled.setChecked(True)
             self.txt_hotwords.setPlainText(DEFAULT_HOTWORDS)
             self._populate_replacements_table(DEFAULT_REPLACEMENTS)
@@ -630,6 +676,7 @@ class MainWindow(QMainWindow):
             self.table_replacements.insertRow(row)
             self.table_replacements.setItem(row, 0, QTableWidgetItem(str(src)))
             self.table_replacements.setItem(row, 1, QTableWidgetItem(str(tgt)))
+        self._filter_replacements(self.txt_repl_search.text() if hasattr(self, 'txt_repl_search') else "")
 
     def _load_vocabulary_ui(self):
         enabled = config.get("custom_vocabulary_enabled", True)
