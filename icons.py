@@ -1,5 +1,85 @@
+import os
+import sys
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QBrush, QPainterPath
 from PyQt6.QtCore import Qt, QRectF, QPointF
+
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+ICONS_DIR = os.path.join(PROJECT_DIR, "icons")
+CHECK_TICK_PATH = os.path.join(ICONS_DIR, "check_tick.png").replace("\\", "/")
+RADIO_DOT_PATH = os.path.join(ICONS_DIR, "radio_dot.png").replace("\\", "/")
+COMBO_ARROW_PATH = os.path.join(ICONS_DIR, "combobox_arrow.png").replace("\\", "/")
+
+def ensure_ui_icons(target_dir: str = None):
+    """
+    Генерирует векторные высокочеткие PNG-ассеты для интерфейса:
+    - галочка выбора (check_tick.png)
+    - точка радио-кнопки (radio_dot.png)
+    - стрелка выпадающего списка (combobox_arrow.png)
+    """
+    if target_dir is None:
+        target_dir = ICONS_DIR
+    os.makedirs(target_dir, exist_ok=True)
+
+    tick_file = os.path.join(target_dir, "check_tick.png")
+    dot_file = os.path.join(target_dir, "radio_dot.png")
+    arrow_file = os.path.join(target_dir, "combobox_arrow.png")
+
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance()
+    app_created = False
+    if app is None:
+        app = QApplication([sys.argv[0], "-platform", "offscreen"])
+        app_created = True
+
+    # 1. Галочка (белая галочка на прозрачном фоне)
+    if not os.path.exists(tick_file):
+        pix_tick = QPixmap(32, 32)
+        pix_tick.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pix_tick)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p1 = QPointF(32 * 0.22, 32 * 0.52)
+        p2 = QPointF(32 * 0.42, 32 * 0.72)
+        p3 = QPointF(32 * 0.78, 32 * 0.30)
+        path = QPainterPath()
+        path.moveTo(p1)
+        path.lineTo(p2)
+        path.lineTo(p3)
+        pen = QPen(QColor('#ffffff'), 3.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.drawPath(path)
+        p.end()
+        pix_tick.save(tick_file, "PNG")
+
+    # 2. Точка радиокнопки
+    if not os.path.exists(dot_file):
+        pix_dot = QPixmap(32, 32)
+        pix_dot.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pix_dot)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setBrush(QBrush(QColor('#09090b')))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QRectF(10, 10, 12, 12))
+        p.end()
+        pix_dot.save(dot_file, "PNG")
+
+    # 3. Стрелочка выпадающего списка (шеврон вниз)
+    if not os.path.exists(arrow_file):
+        pix_arrow = QPixmap(24, 24)
+        pix_arrow.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pix_arrow)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QColor('#71717a'), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        path_arrow = QPainterPath()
+        path_arrow.moveTo(QPointF(6, 9))
+        path_arrow.lineTo(QPointF(12, 15))
+        path_arrow.lineTo(QPointF(18, 9))
+        p.drawPath(path_arrow)
+        p.end()
+        pix_arrow.save(arrow_file, "PNG")
+
+    if app_created:
+        app.quit()
 
 def _render_mic_pixmap(size: int, is_recording: bool) -> QPixmap:
     """Рендерит пиксельно точную иконку микрофона для конкретного размера (16, 20, 24, 32, 48, 64)."""
@@ -190,6 +270,9 @@ def save_app_icons(target_dir: str = None):
     png_path = os.path.join(target_dir, "app_icon.png")
     pix256 = _render_mic_pixmap(256, False)
     pix256.save(png_path, "PNG")
+
+    # Генерация векторных UI иконок (галочки, радиокнопки, стрелочки)
+    ensure_ui_icons(os.path.join(target_dir, "icons"))
 
     # Мультимасштабный ICO для Windows (16, 20, 24, 32, 48, 64, 128, 256)
     sizes = [16, 20, 24, 32, 48, 64, 128, 256]

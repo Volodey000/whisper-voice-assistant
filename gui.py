@@ -8,12 +8,15 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QTextEdit, QLineEdit, QComboBox, QCheckBox,
     QProgressBar, QFileDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QGroupBox, QRadioButton, QButtonGroup,
-    QFrame, QScrollArea, QApplication
+    QFrame, QScrollArea, QApplication, QListView
 )
-from PyQt6.QtGui import QFont, QIcon, QColor
+from PyQt6.QtGui import QFont, QIcon, QColor, QPalette
 
 from config import config
-from icons import get_app_icon, get_tray_minimize_icon, get_play_icon, get_stop_icon
+from icons import (
+    get_app_icon, get_tray_minimize_icon, get_play_icon, get_stop_icon,
+    CHECK_TICK_PATH, RADIO_DOT_PATH, COMBO_ARROW_PATH, ensure_ui_icons
+)
 from waveform import WaveformVisualizer
 from vocabulary import DEFAULT_HOTWORDS, DEFAULT_REPLACEMENTS
 from console_manager import set_console_visible, is_console_visible
@@ -25,32 +28,35 @@ from hotkey_recorder import HotkeyRecorderWidget, format_hotkey_display
 from hardware import detect_hardware, resolve_settings
 import autostart
 
+# Гарантируем наличие векторных UI иконок
+ensure_ui_icons()
+
 # Чистая светлая тема в строгом стиле shadcn/ui (Zinc light)
-SHADCN_STYLESHEET = """
-QMainWindow {
+SHADCN_STYLESHEET = f"""
+QMainWindow {{
     background-color: #fafafa;
     color: #09090b;
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-}
-QWidget {
+}}
+QWidget {{
     color: #09090b;
     font-size: 13px;
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
-}
+}}
 /* Сегментированные вкладки shadcn */
-QTabWidget::pane {
+QTabWidget::pane {{
     border: 1px solid #e4e4e7;
     background-color: #ffffff;
     border-radius: 8px;
     top: 4px;
-}
-QTabBar {
+}}
+QTabBar {{
     background-color: #f4f4f5;
     border: 1px solid #e4e4e7;
     border-radius: 6px;
     padding: 3px;
-}
-QTabBar::tab {
+}}
+QTabBar::tab {{
     background: transparent;
     color: #71717a;
     padding: 6px 18px;
@@ -58,19 +64,19 @@ QTabBar::tab {
     border: none;
     margin-right: 2px;
     font-weight: 500;
-}
-QTabBar::tab:selected {
+}}
+QTabBar::tab:selected {{
     background: #ffffff;
     color: #09090b;
     border: 1px solid #e4e4e7;
     font-weight: 600;
-}
-QTabBar::tab:hover:!selected {
+}}
+QTabBar::tab:hover:!selected {{
     color: #18181b;
-}
+}}
 
 /* Карточки */
-QGroupBox {
+QGroupBox {{
     background-color: #ffffff;
     border: 1px solid #e4e4e7;
     border-radius: 8px;
@@ -79,18 +85,18 @@ QGroupBox {
     padding-top: 24px;
     font-weight: 600;
     color: #09090b;
-}
-QGroupBox::title {
+}}
+QGroupBox::title {{
     subcontrol-origin: margin;
     left: 14px;
     top: 2px;
     color: #52525b;
     font-size: 12px;
     font-weight: 600;
-}
+}}
 
 /* Кнопки shadcn */
-QPushButton {
+QPushButton {{
     background-color: #ffffff;
     border: 1px solid #e4e4e7;
     border-radius: 6px;
@@ -98,51 +104,51 @@ QPushButton {
     color: #09090b;
     font-weight: 500;
     font-size: 13px;
-}
-QPushButton:hover {
+}}
+QPushButton:hover {{
     background-color: #f4f4f5;
     border-color: #d4d4d8;
-}
-QPushButton:pressed {
+}}
+QPushButton:pressed {{
     background-color: #e4e4e7;
-}
-QPushButton:disabled {
+}}
+QPushButton:disabled {{
     background-color: #fafafa;
     color: #a1a1aa;
     border-color: #e4e4e7;
-}
+}}
 
 /* Кнопка быстрой записи в режиме ожидания (белая кнопка с контрастным текстом) */
-QPushButton#primaryBtn {
+QPushButton#primaryBtn {{
     background-color: #ffffff;
     border: 1.5px solid #d4d4d8;
     color: #09090b;
     font-weight: 600;
-}
-QPushButton#primaryBtn:hover {
+}}
+QPushButton#primaryBtn:hover {{
     background-color: #f4f4f5;
     border-color: #a1a1aa;
-}
-QPushButton#primaryBtn:pressed {
+}}
+QPushButton#primaryBtn:pressed {{
     background-color: #e4e4e7;
-}
+}}
 
 /* Кнопка записи в активном состоянии (shadcn destructive red) */
-QPushButton#recordBtnActive {
+QPushButton#recordBtnActive {{
     background-color: #ef4444;
     border: 1.5px solid #dc2626;
     color: #ffffff;
     font-weight: 600;
-}
-QPushButton#recordBtnActive:hover {
+}}
+QPushButton#recordBtnActive:hover {{
     background-color: #dc2626;
-}
-QPushButton#recordBtnActive:pressed {
+}}
+QPushButton#recordBtnActive:pressed {{
     background-color: #b91c1c;
-}
+}}
 
 /* Текстовые поля, строки ввода и таблицы */
-QLineEdit, QTextEdit, QTableWidget {
+QLineEdit, QTextEdit, QTableWidget {{
     background-color: #ffffff;
     border: 1px solid #e4e4e7;
     border-radius: 6px;
@@ -151,77 +157,152 @@ QLineEdit, QTextEdit, QTableWidget {
     selection-background-color: #f4f4f5;
     selection-color: #09090b;
     line-height: 1.5;
-}
-QLineEdit:focus, QTextEdit:focus, QTableWidget:focus {
+}}
+QLineEdit:focus, QTextEdit:focus, QTableWidget:focus {{
     border-color: #71717a;
-}
+}}
 
-/* Выпадающие списки */
-QComboBox {
+/* Выпадающие списки (QComboBox) - гарантированно светлый фон и темный текст */
+QComboBox {{
     background-color: #ffffff;
     border: 1px solid #e4e4e7;
     border-radius: 6px;
     padding: 6px 12px;
     color: #09090b;
-    min-height: 18px;
-}
-QComboBox:hover {
+    font-size: 13px;
+    min-height: 20px;
+}}
+QComboBox:hover {{
     border-color: #a1a1aa;
-}
-QComboBox::drop-down {
+}}
+QComboBox:focus {{
+    border-color: #71717a;
+}}
+QComboBox::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 24px;
     border: none;
-    padding-right: 8px;
-}
-QComboBox QAbstractItemView {
+    background: transparent;
+}}
+QComboBox::down-arrow {{
+    image: url({COMBO_ARROW_PATH});
+    width: 12px;
+    height: 12px;
+}}
+QComboBox QAbstractItemView,
+QComboBox QListView,
+QListView {{
     background-color: #ffffff;
+    background: #ffffff;
     border: 1px solid #e4e4e7;
     border-radius: 6px;
     padding: 4px;
+    color: #09090b;
     selection-background-color: #f4f4f5;
     selection-color: #09090b;
+    outline: none;
+}}
+QComboBox QAbstractItemView::item,
+QComboBox QListView::item,
+QListView::item {{
+    background-color: #ffffff;
     color: #09090b;
-}
+    padding: 6px 10px;
+    border-radius: 4px;
+    min-height: 22px;
+}}
+QComboBox QAbstractItemView::item:hover,
+QComboBox QListView::item:hover,
+QListView::item:hover {{
+    background-color: #f4f4f5;
+    color: #09090b;
+}}
+QComboBox QAbstractItemView::item:selected,
+QComboBox QListView::item:selected,
+QListView::item:selected {{
+    background-color: #e4e4e7;
+    color: #09090b;
+    font-weight: 500;
+}}
 
 /* Полоса прогресса */
-QProgressBar {
+QProgressBar {{
     background-color: #f4f4f5;
     border-radius: 4px;
     border: none;
     text-align: center;
     color: #71717a;
     height: 6px;
-}
-QProgressBar::chunk {
+}}
+QProgressBar::chunk {{
     background-color: #18181b;
     border-radius: 4px;
-}
+}}
 
-/* Чекбоксы и радио-кнопки */
-QCheckBox, QRadioButton {
+/* Чекбоксы: настоящие галочки shadcn/ui */
+QCheckBox {{
     spacing: 8px;
     color: #18181b;
     font-weight: 400;
-}
-QCheckBox::indicator, QRadioButton::indicator {
+}}
+QCheckBox::indicator {{
     width: 16px;
     height: 16px;
-    border: 1px solid #d4d4d8;
     border-radius: 4px;
+}}
+QCheckBox::indicator:unchecked {{
     background-color: #ffffff;
-}
-QRadioButton::indicator {
-    border-radius: 8px;
-}
-QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border: 1.5px solid #d4d4d8;
+    image: none;
+}}
+QCheckBox::indicator:unchecked:hover {{
     border-color: #71717a;
-}
-QCheckBox::indicator:checked, QRadioButton::indicator:checked {
-    background-color: #18181b;
-    border-color: #18181b;
-}
+    background-color: #f4f4f5;
+}}
+QCheckBox::indicator:checked {{
+    background-color: #09090b;
+    border: 1.5px solid #09090b;
+    image: url({CHECK_TICK_PATH});
+}}
+QCheckBox::indicator:checked:hover {{
+    background-color: #27272a;
+    border-color: #27272a;
+    image: url({CHECK_TICK_PATH});
+}}
+
+/* Радио-кнопки */
+QRadioButton {{
+    spacing: 8px;
+    color: #18181b;
+    font-weight: 400;
+}}
+QRadioButton::indicator {{
+    width: 16px;
+    height: 16px;
+    border-radius: 9px;
+}}
+QRadioButton::indicator:unchecked {{
+    background-color: #ffffff;
+    border: 1.5px solid #d4d4d8;
+    image: none;
+}}
+QRadioButton::indicator:unchecked:hover {{
+    border-color: #71717a;
+    background-color: #f4f4f5;
+}}
+QRadioButton::indicator:checked {{
+    background-color: #ffffff;
+    border: 2px solid #09090b;
+    image: url({RADIO_DOT_PATH});
+}}
+QRadioButton::indicator:checked:hover {{
+    border-color: #27272a;
+    image: url({RADIO_DOT_PATH});
+}}
 
 /* Заголовки таблиц */
-QHeaderView::section {
+QHeaderView::section {{
     background-color: #f4f4f5;
     color: #71717a;
     padding: 8px 10px;
@@ -229,37 +310,114 @@ QHeaderView::section {
     border-bottom: 1px solid #e4e4e7;
     font-weight: 600;
     font-size: 12px;
-}
-QTableWidget {
+}}
+QTableWidget {{
     gridline-color: #f4f4f5;
-}
+}}
 
 /* Элегантный тонкий скроллбар в стиле shadcn */
-QScrollBar:vertical {
+QScrollBar:vertical {{
     background: transparent;
     width: 8px;
     margin: 4px 1px 4px 1px;
-}
-QScrollBar::handle:vertical {
+}}
+QScrollBar::handle:vertical {{
     background: #e4e4e7;
     min-height: 24px;
     border-radius: 4px;
-}
-QScrollBar::handle:vertical:hover {
+}}
+QScrollBar::handle:vertical:hover {{
     background: #d4d4d8;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0px;
     background: none;
-}
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     background: none;
-}
-QScrollArea {
+}}
+QScrollArea {{
     background: transparent;
     border: none;
-}
+}}
 """
+
+def setup_light_combobox(combo: QComboBox):
+    """
+    Гарантирует белоснежный фон, четкий темный текст и красивое выпадающее меню
+    для QComboBox независимо от темы Windows (светлая/темная).
+    """
+    view = QListView(combo)
+    view.setStyleSheet("""
+        QListView {
+            background-color: #ffffff;
+            background: #ffffff;
+            color: #09090b;
+            border: 1px solid #e4e4e7;
+            border-radius: 6px;
+            padding: 4px;
+            outline: none;
+            selection-background-color: #f4f4f5;
+            selection-color: #09090b;
+        }
+        QListView::item {
+            background-color: #ffffff;
+            color: #09090b;
+            padding: 6px 10px;
+            border-radius: 4px;
+            min-height: 22px;
+        }
+        QListView::item:hover {
+            background-color: #f4f4f5;
+            color: #09090b;
+        }
+        QListView::item:selected {
+            background-color: #e4e4e7;
+            color: #09090b;
+            font-weight: 500;
+        }
+    """)
+    pal = view.palette()
+    pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    pal.setColor(QPalette.ColorRole.Window, QColor("#ffffff"))
+    pal.setColor(QPalette.ColorRole.Text, QColor("#09090b"))
+    pal.setColor(QPalette.ColorRole.WindowText, QColor("#09090b"))
+    pal.setColor(QPalette.ColorRole.Highlight, QColor("#e4e4e7"))
+    pal.setColor(QPalette.ColorRole.HighlightedText, QColor("#09090b"))
+    view.setPalette(pal)
+    if view.viewport():
+        view.viewport().setPalette(pal)
+        view.viewport().setStyleSheet("background-color: #ffffff; color: #09090b;")
+    combo.setView(view)
+
+class LightComboBox(QComboBox):
+    """
+    Выпадающий список с гарантированно светлым фоном и темным текстом меню,
+    устойчивый к темной теме Windows 10/11.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        setup_light_combobox(self)
+
+    def showPopup(self):
+        super().showPopup()
+        container = self.view().window()
+        if container:
+            container.setStyleSheet("""
+                QFrame {
+                    background-color: #ffffff;
+                    background: #ffffff;
+                    color: #09090b;
+                    border: 1px solid #e4e4e7;
+                    border-radius: 6px;
+                }
+            """)
+            c_pal = container.palette()
+            c_pal.setColor(QPalette.ColorRole.Window, QColor("#ffffff"))
+            c_pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+            c_pal.setColor(QPalette.ColorRole.Text, QColor("#09090b"))
+            c_pal.setColor(QPalette.ColorRole.WindowText, QColor("#09090b"))
+            container.setPalette(c_pal)
 
 class MainWindow(QMainWindow):
     request_toggle_recording = pyqtSignal()
@@ -743,7 +901,7 @@ class MainWindow(QMainWindow):
 
         opts_layout = QHBoxLayout()
         opts_layout.addWidget(QLabel("Язык:"))
-        self.cmb_file_lang = QComboBox(self)
+        self.cmb_file_lang = LightComboBox(self)
         self.cmb_file_lang.addItems(["Автоопределение", "Русский", "English"])
         opts_layout.addWidget(self.cmb_file_lang)
         opts_layout.addStretch()
@@ -839,7 +997,7 @@ class MainWindow(QMainWindow):
 
         dev_row = QHBoxLayout()
         dev_row.addWidget(QLabel("Устройство:"))
-        self.cmb_device = QComboBox(self)
+        self.cmb_device = LightComboBox(self)
         self.cmb_device.addItem("Автовыбор по оборудованию", "auto")
         self.cmb_device.addItem("NVIDIA GPU (CUDA, float16)", "cuda")
         self.cmb_device.addItem("Процессор (CPU, int8 режим)", "cpu")
@@ -848,7 +1006,7 @@ class MainWindow(QMainWindow):
 
         m_row1 = QHBoxLayout()
         m_row1.addWidget(QLabel("Модель Whisper:"))
-        self.cmb_model = QComboBox(self)
+        self.cmb_model = LightComboBox(self)
         self.cmb_model.addItem("Автовыбор (GPU: large-v3-turbo / Ноутбук: small)", "auto")
         self.cmb_model.addItem("large-v3-turbo (Максимальная точность)", "large-v3-turbo")
         self.cmb_model.addItem("medium (Высокая точность)", "medium")
@@ -859,7 +1017,7 @@ class MainWindow(QMainWindow):
 
         m_row2 = QHBoxLayout()
         m_row2.addWidget(QLabel("Язык по умолчанию:"))
-        self.cmb_lang = QComboBox(self)
+        self.cmb_lang = LightComboBox(self)
         self.cmb_lang.addItem("Автоопределение (RU / EN)", "auto")
         self.cmb_lang.addItem("Русский", "ru")
         self.cmb_lang.addItem("English", "en")
@@ -902,7 +1060,7 @@ class MainWindow(QMainWindow):
 
         sound_row = QHBoxLayout()
         sound_row.addWidget(QLabel("Звуковые эффекты:"))
-        self.cmb_sound_theme = QComboBox(self)
+        self.cmb_sound_theme = LightComboBox(self)
         self.cmb_sound_theme.addItem("Hi-Fi студийные перезвоны", "hifi")
         self.cmb_sound_theme.addItem("Классические тоновые сигналы", "classic")
         self.cmb_sound_theme.addItem("Звуки отключены", "off")
@@ -914,7 +1072,7 @@ class MainWindow(QMainWindow):
 
         pos_row = QHBoxLayout()
         pos_row.addWidget(QLabel("Расположение оверлея:"))
-        self.cmb_overlay_pos = QComboBox(self)
+        self.cmb_overlay_pos = LightComboBox(self)
         self.cmb_overlay_pos.addItem("Вверху по центру (по умолчанию)", "top_center")
         self.cmb_overlay_pos.addItem("Внизу по центру", "bottom_center")
         self.cmb_overlay_pos.addItem("Вверху справа", "top_right")
@@ -945,7 +1103,7 @@ class MainWindow(QMainWindow):
 
         mic_row = QHBoxLayout()
         mic_row.addWidget(QLabel("Микрофон:"))
-        self.cmb_devices = QComboBox(self)
+        self.cmb_devices = LightComboBox(self)
         self._populate_audio_devices()
         mic_row.addWidget(self.cmb_devices, 2)
         mic_vlayout.addLayout(mic_row)
@@ -955,7 +1113,7 @@ class MainWindow(QMainWindow):
 
         ng_row = QHBoxLayout()
         ng_row.addWidget(QLabel("Чувствительность шумоподавления:"))
-        self.cmb_noise_level = QComboBox(self)
+        self.cmb_noise_level = LightComboBox(self)
         self.cmb_noise_level.addItem("Средняя (рекомендуется)", "medium")
         self.cmb_noise_level.addItem("Мягкая (только тихое шипение)", "soft")
         self.cmb_noise_level.addItem("Агрессивная (для шумных помещений)", "aggressive")

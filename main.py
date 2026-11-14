@@ -329,6 +329,26 @@ def main():
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     app = QApplication(sys.argv)
 
+    # Принудительно устанавливаем чистую светлую палитру и глобальный стиль shadcn/ui,
+    # чтобы при темной теме Windows выпадающие списки и всплывающие окна не становились черными
+    from PyQt6.QtGui import QPalette, QColor
+    from gui import SHADCN_STYLESHEET
+
+    light_pal = app.palette()
+    light_pal.setColor(QPalette.ColorRole.Window, QColor("#fafafa"))
+    light_pal.setColor(QPalette.ColorRole.WindowText, QColor("#09090b"))
+    light_pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    light_pal.setColor(QPalette.ColorRole.AlternateBase, QColor("#f4f4f5"))
+    light_pal.setColor(QPalette.ColorRole.ToolTipBase, QColor("#ffffff"))
+    light_pal.setColor(QPalette.ColorRole.ToolTipText, QColor("#09090b"))
+    light_pal.setColor(QPalette.ColorRole.Text, QColor("#09090b"))
+    light_pal.setColor(QPalette.ColorRole.Button, QColor("#ffffff"))
+    light_pal.setColor(QPalette.ColorRole.ButtonText, QColor("#09090b"))
+    light_pal.setColor(QPalette.ColorRole.Highlight, QColor("#e4e4e7"))
+    light_pal.setColor(QPalette.ColorRole.HighlightedText, QColor("#09090b"))
+    app.setPalette(light_pal)
+    app.setStyleSheet(SHADCN_STYLESHEET)
+
     # 1. Попытка связаться с уже работающим экземпляром через QLocalSocket
     server_name = "WhisperVoiceAssistant_IPC"
     sock = QLocalSocket()
