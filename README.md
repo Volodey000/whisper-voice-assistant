@@ -1,7 +1,7 @@
 # Whisper Voice Assistant
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Release-v1.0.0-09090b?style=flat-square" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v1.1.0-09090b?style=flat-square" alt="Release" />
   <img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/Engine-Faster--Whisper-D97706?style=flat-square" alt="Faster-Whisper" />
   <img src="https://img.shields.io/badge/GUI-PyQt6%20Zinc%20Light-10B981?style=flat-square&logo=qt&logoColor=white" alt="PyQt6" />
