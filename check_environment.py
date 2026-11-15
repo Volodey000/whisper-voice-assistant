@@ -26,17 +26,36 @@ except Exception:
 VENV_DIR = os.path.join(PROJECT_DIR, ".venv")
 VENV_PY = os.path.join(VENV_DIR, "Scripts", "python.exe")
 
-# Список обязательных пакетов для работы Whisper Voice Assistant
+# Список обязательных пакетов и модулей для работы Whisper Voice Assistant
 REQUIRED_PACKAGES = [
-    ("PyQt6", "PyQt6>=6.5.0"),
+    ("PyQt6.QtWidgets", "PyQt6>=6.5.0"),
+    ("PyQt6.QtCore", "PyQt6>=6.5.0"),
+    ("PyQt6.QtGui", "PyQt6>=6.5.0"),
+    ("PyQt6.QtNetwork", "PyQt6>=6.5.0"),
     ("torch", "torch>=2.0.0"),
     ("faster_whisper", "faster-whisper>=1.0.0"),
+    ("ctranslate2", "ctranslate2>=4.0.0"),
     ("sounddevice", "sounddevice>=0.5.0"),
     ("soundfile", "soundfile>=0.12.0"),
     ("keyboard", "keyboard>=0.13.5"),
     ("pyperclip", "pyperclip>=1.8.0"),
     ("numpy", "numpy>=1.24.0")
 ]
+
+def check_vc_redist() -> bool:
+    """Проверяет наличие системного пакета Microsoft Visual C++ 2015-2022 Redistributable."""
+    if sys.platform != "win32":
+        return True
+    system32 = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
+    vc_dll = os.path.join(system32, "vcruntime140.dll")
+    if not os.path.exists(vc_dll):
+        print("=" * 60)
+        print(" [ВНИМАНИЕ] Не найден Microsoft Visual C++ 2015-2022 Redistributable!")
+        print(" Для работы PyTorch, Faster-Whisper и C++ библиотек установите:")
+        print(" https://aka.ms/vs/17/release/vc_redist.x64.exe")
+        print("=" * 60)
+        return False
+    return True
 
 def has_nvidia_gpu() -> bool:
     """Проверяет наличие видеокарты NVIDIA и установленных драйверов CUDA в Windows."""
@@ -49,17 +68,22 @@ def has_nvidia_gpu() -> bool:
     return False
 
 def check_missing_packages():
-    """Проверяет, какие из обязательных библиотек отсутствуют."""
+    """Проверяет, какие из обязательных библиотек отсутствуют или повреждены."""
     missing = []
+    seen = set()
     for mod_name, pip_spec in REQUIRED_PACKAGES:
         try:
             importlib.import_module(mod_name)
         except ImportError:
-            missing.append(pip_spec)
+            if pip_spec not in seen:
+                seen.add(pip_spec)
+                missing.append(pip_spec)
         except Exception as e:
             # Например, сбой зависимых dll
             print(f"[Внимание] Ошибка при проверке модуля {mod_name}: {e}")
-            missing.append(pip_spec)
+            if pip_spec not in seen:
+                seen.add(pip_spec)
+                missing.append(pip_spec)
     return missing
 
 def install_packages(packages):
@@ -148,8 +172,51 @@ def check_torch_status():
         print(f"[PyTorch] Предупреждение инициализации torch: {e}")
         return False
 
+def check_win_mic_permission() -> bool:
+    """Проверяет системное разрешение Windows 10/11 на доступ приложений к микрофону."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            val, _ = winreg.QueryValueEx(key, "Value")
+            if str(val).lower() == "deny":
+                print("[Микрофон] ⚠️ Внимание: В настройках Windows доступ к микрофону ОТКЛЮЧЕН!")
+                print("           Включите: Параметры Windows -> Конфиденциальность и защита -> Микрофон -> Разрешить доступ")
+                return False
+    except Exception:
+        pass
+    return True
+
+def check_huggingface_access() -> bool:
+    """Проверяет доступность серверов Hugging Face для загрузки моделей Whisper."""
+    import urllib.request
+    try:
+        urllib.request.urlopen("https://huggingface.co", timeout=3)
+        return True
+    except Exception:
+        return False
+
+def check_running_process() -> bool:
+    """Проверяет, запущен ли уже экземпляр Whisper Voice Assistant в фоне или трее."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        mutex_name = "WhisperVoiceAssistant_SingleInstance_Mutex"
+        handle = ctypes.windll.kernel32.OpenMutexW(0x00100000, False, mutex_name)
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            print("[Процесс] ℹ️ Whisper Voice Assistant уже запущен и активен (в системном трее или в фоне).")
+            return True
+    except Exception:
+        pass
+    return False
+
 def check_and_fix_audio_devices():
     """Проверяет звуковые устройства и предотвращает сбои при несовпадающих ID."""
+    check_win_mic_permission()
     try:
         import sounddevice as sd
         from config import config
@@ -191,7 +258,12 @@ def check_models_availability():
     if available:
         print(f"[Модели] Готовы локально в папке models/: {', '.join(available)}")
     else:
-        print("[Модели] Локальная папка models/ готова. Модель Whisper скачается автоматически при первом распознавании.")
+        hf_ok = check_huggingface_access()
+        if hf_ok:
+            print("[Модели] Локальная папка models/ готова. Модель Whisper скачается автоматически при первом распознавании (доступ к huggingface.co есть).")
+        else:
+            print("[Модели] ⚠️ Внимание: Локальные модели в папке models/ не найдены, и сервер huggingface.co недоступен.")
+            print("         Скопируйте папку 'models' с другого компьютера для работы без интернета.")
 
 def ensure_app_icons_and_shortcut():
     """Создает файлы app_icon.ico, app_icon.png и ярлык Start Whisper.lnk при их отсутствии или переезде."""
@@ -272,6 +344,8 @@ def main():
     print("=" * 60)
     print(" [Whisper Voice Assistant] Диагностика и проверка компонентов")
     print("=" * 60)
+    check_vc_redist()
+    check_running_process()
     print("[Проверка] Проверка установленных библиотек...")
     missing = check_missing_packages()
 

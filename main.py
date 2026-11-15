@@ -59,15 +59,25 @@ def _bootstrap_environment():
 
     # Внутри .venv проверяем обязательные пакеты (включая torch) ДО импорта PyQt6
     try:
-        from check_environment import check_missing_packages, install_packages, check_and_fix_audio_devices, ensure_app_icons_and_shortcut
+        from check_environment import check_missing_packages, install_packages, check_and_fix_audio_devices, ensure_app_icons_and_shortcut, check_models_availability, check_vc_redist
+        check_vc_redist()
         missing = check_missing_packages()
         if missing:
-            print("[Whisper Voice Assistant] Обнаружены недостающие компоненты. Автоматическая установка...")
+            print("=" * 60)
+            print(" [Whisper Voice Assistant] Обнаружены недостающие компоненты")
+            print("=" * 60)
+            for m in missing:
+                print(f"  -> {m}")
+            print("\n[Инфо] Запуск автоматической установки...")
             ok = install_packages(missing)
             if not ok:
                 print("[Whisper Voice Assistant] Ошибка: Не удалось установить зависимости.")
                 sys.exit(1)
+            print("[Инфо] Все зависимости успешно установлены. Перезапуск с чистым окружением...")
+            cmd = [sys.executable, os.path.abspath(__file__)] + sys.argv[1:]
+            sys.exit(subprocess.call(cmd))
         check_and_fix_audio_devices()
+        check_models_availability()
         ensure_app_icons_and_shortcut()
     except Exception as e_check:
         print(f"[Whisper Voice Assistant] Замечание предстартовой проверки: {e_check}")
@@ -76,6 +86,10 @@ _bootstrap_environment()
 
 import traceback
 def _global_excepthook(exc_type, exc_value, exc_tb):
+    try:
+        traceback.print_exception(exc_type, exc_value, exc_tb)
+    except Exception:
+        pass
     try:
         log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "crash.log")
         with open(log_path, "a", encoding="utf-8") as f:

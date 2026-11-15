@@ -9,23 +9,26 @@ echo   Whisper Voice Assistant
 echo ========================================================
 
 :: 1. Проверяем локальный .venv
-if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" -c "import sys" >nul 2>nul
-    if not errorlevel 1 (
-        echo [Инфо] Запуск из виртуального окружения .venv...
-        ".venv\Scripts\python.exe" main.py %*
-        if errorlevel 1 (
-            echo.
-            echo [Внимание] Приложение завершило работу с кодом %errorlevel%.
-            pause
-        )
-        exit /b %errorlevel%
-    )
+if not exist ".venv\Scripts\python.exe" goto :find_python
+".venv\Scripts\python.exe" -c "import sys" >nul 2>nul
+if errorlevel 1 (
     echo [Внимание] Текущий .venv поврежден или скопирован с другого ПК.
     echo [Инфо] Пересоздание виртуального окружения...
     rd /s /q ".venv" 2>nul
+    goto :find_python
 )
 
+echo [Инфо] Запуск из виртуального окружения .venv...
+".venv\Scripts\python.exe" main.py %*
+set "EXIT_CODE=%errorlevel%"
+if %EXIT_CODE% neq 0 (
+    echo.
+    echo [Внимание] Приложение завершило работу с кодом %EXIT_CODE%.
+    pause
+)
+exit /b %EXIT_CODE%
+
+:find_python
 :: 2. Поиск Python на компьютере
 set "SYS_PY="
 
@@ -110,9 +113,10 @@ if not defined SYS_PY (
 :: 4. Запуск приложения (самоинициализация .venv встроена в main.py)
 echo [Инфо] Запуск Whisper Voice Assistant через %SYS_PY%...
 %SYS_PY% main.py %*
-if errorlevel 1 (
+set "EXIT_CODE=%errorlevel%"
+if %EXIT_CODE% neq 0 (
     echo.
-    echo [Внимание] Приложение завершило работу с кодом %errorlevel%.
+    echo [Внимание] Приложение завершило работу с кодом %EXIT_CODE%.
     pause
 )
-exit /b %errorlevel%
+exit /b %EXIT_CODE%
