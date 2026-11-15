@@ -293,7 +293,8 @@ class VoiceAssistantApp:
             history.add_entry(clean_text, language=hist_lang, duration=duration)
             self.main_window.display_latest_text(clean_text)
         else:
-            self.overlay.hide_overlay()
+            print("[App] Речь не распознана (пустой результат распознавания).")
+            self.overlay.show_error("Речь не распознана", "Скажите фразу громче или проверьте микрофон")
 
     def _on_transcription_error(self, err_msg: str):
         print(f"[App] Ошибка распознавания: {err_msg}")

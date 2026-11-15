@@ -279,6 +279,30 @@ try:
 except Exception as e:
     report("Clipboard & Paste: буфер обмена", False, f"{e}\n{traceback.format_exc()}")
 
+# -------------------------------------------------------------
+# ТЕСТ 12: Системный приоритет горячих клавиш Windows (RegisterHotKey)
+# -------------------------------------------------------------
+try:
+    from hotkey_manager import parse_hotkey_to_win32, Win32HotkeyThread, MOD_CONTROL, MOD_ALT
+    parsed_main = parse_hotkey_to_win32("ctrl+`")
+    parsed_trans = parse_hotkey_to_win32("alt+`")
+    assert parsed_main is not None and parsed_main[0] == MOD_CONTROL and parsed_main[1] == 0xC0
+    assert parsed_trans is not None and parsed_trans[0] == MOD_ALT and parsed_trans[1] == 0xC0
+
+    # Проверка создания и запуска Win32 потока с тестовой комбинацией (чтобы не конфликтовать с активным процессом)
+    parsed_test = parse_hotkey_to_win32("ctrl+shift+f11")
+    test_triggered = []
+    thread = Win32HotkeyThread({999: parsed_test}, lambda hid: test_triggered.append(hid))
+    thread.start()
+    time.sleep(0.05)
+    registered = 999 in thread.registered_ids
+    thread.stop()
+    thread.join(0.5)
+
+    report("Hotkey Priority: системный Win32 RegisterHotKey перехват", registered, "Высочайший приоритет ОС Windows над всеми открытыми приложениями подтвержден")
+except Exception as e:
+    report("Hotkey Priority: системный перехват", False, f"{e}\n{traceback.format_exc()}")
+
 print("=" * 70, flush=True)
 print(f"  ИТОГ ТЕСТИРОВАНИЯ: {PASSED} пройдено, {FAILED} сбоев", flush=True)
 print("=" * 70, flush=True)

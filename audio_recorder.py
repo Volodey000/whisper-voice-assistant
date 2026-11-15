@@ -52,15 +52,15 @@ class AudioRecorder:
             elif chunk.size > 0:
                 self.current_bands = [min(1.0, (rms * 36.0) ** 0.65)] * self.num_bands
 
-            # Шумоподавление (Noise Gate)
-            if config.get("noise_gate", True):
-                level = config.get("noise_gate_level", "medium")
-                thresholds = {"soft": 0.005, "medium": 0.009, "aggressive": 0.016}
-                threshold = thresholds.get(level, 0.009)
+            # Шумоподавление (Noise Gate) с мягким щадящим порогом, чтобы не подавлять тихую речь
+            if config.get("noise_gate", False):
+                level = config.get("noise_gate_level", "soft")
+                thresholds = {"soft": 0.0015, "medium": 0.003, "aggressive": 0.006}
+                threshold = thresholds.get(level, 0.002)
                 if rms < threshold:
-                    # Мягкое плавное подавление фонового шума без артефактов клиппинга
-                    attenuation = (rms / threshold) ** 2
-                    chunk = chunk * attenuation
+                    # Мягкое плавное подавление фонового шума без подавления тихих согласных и гласных
+                    factor = max(0.35, rms / threshold)
+                    chunk = chunk * factor
 
             self.q.put(chunk)
 

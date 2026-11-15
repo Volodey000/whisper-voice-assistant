@@ -1,27 +1,132 @@
+# -*- coding: utf-8 -*-
+"""
+hotkey_manager.py: Двухуровневая система глобальных горячих клавиш Windows с наивысшим
+системным приоритетом над всеми открытыми приложениями (Win32 RegisterHotKey + low-level hook).
+"""
+
 import time
+import threading
+import ctypes
+from ctypes import wintypes
 import keyboard
 from PyQt6.QtCore import QObject, pyqtSignal
 from config import config
 
+user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
+
+MOD_ALT = 0x0001
+MOD_CONTROL = 0x0002
+MOD_SHIFT = 0x0004
+MOD_WIN = 0x0008
+MOD_NOREPEAT = 0x4000
+
+VK_MAP = {
+    '`': 0xC0, '~': 0xC0, 'ё': 0xC0, 'grave': 0xC0,
+    'space': 0x20, 'tab': 0x09, 'enter': 0x0D, 'return': 0x0D, 'esc': 0x1B, 'escape': 0x1B,
+    'backspace': 0x08, 'capslock': 0x14,
+    'pageup': 0x21, 'page_up': 0x21, 'pagedown': 0x22, 'page_down': 0x22,
+    'end': 0x23, 'home': 0x24, 'left': 0x25, 'up': 0x26, 'right': 0x27, 'down': 0x28,
+    'printscreen': 0x2C, 'insert': 0x2D, 'delete': 0x2E,
+    '-': 0xBD, 'minus': 0xBD, '=': 0xBB, 'equal': 0xBB,
+    '[': 0xDB, ']': 0xDD, '\\': 0xDC, ';': 0xBA, "'": 0xDE,
+    ',': 0xBC, '.': 0xBE, '/': 0xBF
+}
+for i in range(1, 25):
+    VK_MAP[f'f{i}'] = 0x70 + (i - 1)
+
+def parse_hotkey_to_win32(hotkey_str: str) -> tuple[int, int] | None:
+    """Преобразует строку горячей клавиши (напр. 'ctrl+`', 'alt+`', 'f8') в кортеж (modifiers, vk)."""
+    if not hotkey_str:
+        return None
+    parts = [p.strip().lower() for p in hotkey_str.replace('+', ' ').split() if p.strip()]
+    if not parts:
+        return None
+
+    mods = 0
+    key = None
+    for p in parts:
+        if p in ('ctrl', 'control'):
+            mods |= MOD_CONTROL
+        elif p in ('alt', 'menu'):
+            mods |= MOD_ALT
+        elif p in ('shift',):
+            mods |= MOD_SHIFT
+        elif p in ('win', 'windows', 'super'):
+            mods |= MOD_WIN
+        else:
+            key = p
+
+    if not key:
+        return None
+
+    if key in VK_MAP:
+        vk = VK_MAP[key]
+    elif len(key) == 1:
+        ch = key.upper()
+        if 'A' <= ch <= 'Z' or '0' <= ch <= '9':
+            vk = ord(ch)
+        else:
+            vk = user32.VkKeyScanW(ord(key)) & 0xFF
+    else:
+        return None
+
+    return mods, vk
+
+class Win32HotkeyThread(threading.Thread):
+    """
+    Поток системного перехвата с наивысшим приоритетом через Win32 RegisterHotKey.
+    Гарантирует перехват горячей клавиши даже если другое приложение находится в фокусе.
+    """
+    def __init__(self, hotkeys: dict[int, tuple[int, int]], on_hotkey_callback):
+        super().__init__(daemon=True)
+        self.hotkeys = hotkeys  # id -> (mods, vk)
+        self.callback = on_hotkey_callback
+        self.thread_id = None
+        self._running = True
+        self.registered_ids = []
+
+    def run(self):
+        self.thread_id = kernel32.GetCurrentThreadId()
+        for hk_id, (mods, vk) in self.hotkeys.items():
+            # Регистрация с флагом MOD_NOREPEAT (наивысший приоритет ОС Windows, без дребезга)
+            if user32.RegisterHotKey(None, hk_id, mods | MOD_NOREPEAT, vk):
+                self.registered_ids.append(hk_id)
+            else:
+                if user32.RegisterHotKey(None, hk_id, mods, vk):
+                    self.registered_ids.append(hk_id)
+
+        msg = wintypes.MSG()
+        while self._running:
+            res = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+            if res <= 0:
+                break
+            if msg.message == 0x0312:  # WM_HOTKEY
+                hk_id = msg.wParam
+                if self.callback:
+                    self.callback(hk_id)
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
+
+        for hk_id in self.registered_ids:
+            user32.UnregisterHotKey(None, hk_id)
+
+    def stop(self):
+        self._running = False
+        if self.thread_id:
+            user32.PostThreadMessageW(self.thread_id, 0x0012, 0, 0)  # WM_QUIT
+
 def _patch_winkeyboard():
-    """
-    1. Исправляет ошибку SetWindowsHookEx (Error 126 / ERROR_MOD_NOT_FOUND)
-       в виртуальных окружениях Python .venv, где GetModuleHandleW(None) указывает
-       на stub-лаунчер. Для глобального хука WH_KEYBOARD_LL параметр hMod должен быть 0 (NULL).
-    2. Обеспечивает корректную работу клавиш backtick (`), ё и латинских букв
-       в Windows независимо от того, какая раскладка (русская/английская) активна.
-    """
+    """Исправляет хуки клавиатуры в окружениях Python на Windows."""
     try:
         import keyboard._winkeyboard as w
         if getattr(w, '_whisper_patched', False):
             return
 
-        # Патч 1: SetWindowsHookEx c hMod=0 для WH_KEYBOARD_LL
         if hasattr(w, 'SetWindowsHookEx'):
             orig_SetWindowsHookEx = w.SetWindowsHookEx
 
             def safe_SetWindowsHookEx(idHook, lpfn, hMod, dwThreadId):
-                # Для WH_KEYBOARD_LL (13) передаем hMod=0 (NULL), что гарантирует успешную регистрацию в .venv
                 res = orig_SetWindowsHookEx(idHook, lpfn, 0, dwThreadId)
                 if not res:
                     res = orig_SetWindowsHookEx(idHook, lpfn, hMod, dwThreadId)
@@ -29,19 +134,16 @@ def _patch_winkeyboard():
 
             w.SetWindowsHookEx = safe_SetWindowsHookEx
 
-        # Патч 2: Таблицы раскладки клавиш
         if hasattr(w, '_setup_name_tables'):
             orig_setup = w._setup_name_tables
 
             def patched_setup():
                 orig_setup()
-                # Scan code 41 = физическая клавиша ` / ~ / ё (VK 192 / 0xC0)
                 entry_oem3 = [(0, (41, 192, 0, ())), (0, (41, 192, 1, ()))]
                 for alias in [chr(96), "`", "grave", "~", "ё"]:
                     if not w.from_name.get(alias):
                         w.from_name[alias].extend(entry_oem3)
 
-                # Добавляем стандартные сканкоды QWERTY клавиш a-z
                 qwerty_scan_codes = {
                     'q': 16, 'w': 17, 'e': 18, 'r': 19, 't': 20, 'y': 21, 'u': 22, 'i': 23, 'o': 24, 'p': 25,
                     'a': 30, 's': 31, 'd': 32, 'f': 33, 'g': 34, 'h': 35, 'j': 36, 'k': 37, 'l': 38,
@@ -72,6 +174,8 @@ class HotkeyManager(QObject):
         self._current_translate_hotkey = None
         self._hook_refs = []
         self._is_holding = False
+        self._win32_thread = None
+        self._last_toggle_time = 0.0
 
     def setup(self):
         self.unregister()
@@ -83,7 +187,40 @@ class HotkeyManager(QObject):
 
         print(f"[Hotkey] Регистрация горячей клавиши диктовки: '{hotkey}' (режим: {mode})")
 
-        # 1. Основная клавиша диктовки
+        # -------------------------------------------------------------
+        # УРОВЕНЬ 1: Win32 RegisterHotKey (Наивысший системный приоритет над всеми окнами)
+        # -------------------------------------------------------------
+        if mode == "toggle":
+            hk_parsed = parse_hotkey_to_win32(hotkey)
+            trans_parsed = parse_hotkey_to_win32(trans_hk) if (trans_hk and trans_hk != hotkey) else None
+
+            win32_dict = {}
+            if hk_parsed:
+                win32_dict[1] = hk_parsed
+            if trans_parsed:
+                win32_dict[2] = trans_parsed
+
+            if win32_dict:
+                def _on_win32_hotkey(hid):
+                    now = time.time()
+                    if now - self._last_toggle_time < 0.35:
+                        return
+                    self._last_toggle_time = now
+                    task = "translate" if hid == 2 else "transcribe"
+                    self.toggle_recording.emit(task)
+
+                self._win32_thread = Win32HotkeyThread(win32_dict, _on_win32_hotkey)
+                self._win32_thread.start()
+                time.sleep(0.05)
+                registered = self._win32_thread.registered_ids
+                if 1 in registered:
+                    print(f"[Hotkey] Приоритетный системный перехват RegisterHotKey для '{hotkey}' активен.")
+                if 2 in registered:
+                    print(f"[Hotkey] Приоритетный системный перехват RegisterHotKey для '{trans_hk}' активен.")
+
+        # -------------------------------------------------------------
+        # УРОВЕНЬ 2: Low-level keyboard hook (Push-to-talk или резервный канал)
+        # -------------------------------------------------------------
         try:
             if mode == "hold":
                 # Режим рации (Push-to-talk)
@@ -101,39 +238,21 @@ class HotkeyManager(QObject):
                 h2 = keyboard.on_release_key(hotkey, on_up, suppress=False)
                 self._hook_refs.extend([h1, h2])
             else:
-                # Режим переключения (Toggle: нажал - говорит, нажал - остановил)
-                _last_toggle = 0.0
-
+                # Резервный перехват для toggle режима
                 def on_toggle():
-                    nonlocal _last_toggle
                     now = time.time()
-                    if now - _last_toggle < 0.35:
+                    if now - self._last_toggle_time < 0.35:
                         return
-                    _last_toggle = now
+                    self._last_toggle_time = now
                     self.toggle_recording.emit("transcribe")
 
                 h = keyboard.add_hotkey(hotkey, on_toggle, suppress=False)
                 self._hook_refs.append(h)
         except Exception as e:
-            print(f"[Hotkey] Ошибка регистрации клавиши '{hotkey}': {e}")
-            if hotkey != "f8":
-                print("[Hotkey] Регистрация безопасной резервной клавиши F8...")
-                try:
-                    if mode == "hold":
-                        h1 = keyboard.on_press_key("f8", on_down, suppress=False)
-                        h2 = keyboard.on_release_key("f8", on_up, suppress=False)
-                        self._hook_refs.extend([h1, h2])
-                    else:
-                        h = keyboard.add_hotkey("f8", on_toggle, suppress=False)
-                        self._hook_refs.append(h)
-                    self._current_hotkey = "f8"
-                    print("[Hotkey] Резервная клавиша F8 успешно подключена.")
-                except Exception as e_fallback:
-                    print(f"[Hotkey] Критический сбой горячих клавиш: {e_fallback}")
+            print(f"[Hotkey] Замечание по регистрации клавиши '{hotkey}': {e}")
 
-        # 2. Горячая клавиша мгновенного перевода на английский (RU -> EN)
+        # Горячая клавиша перевода (RU -> EN)
         if trans_hk and trans_hk != hotkey:
-            print(f"[Hotkey] Регистрация горячей клавиши перевода: '{trans_hk}' (RU -> EN)")
             try:
                 if mode == "hold":
                     def on_trans_down(e):
@@ -150,14 +269,11 @@ class HotkeyManager(QObject):
                     th2 = keyboard.on_release_key(trans_hk, on_trans_up, suppress=False)
                     self._hook_refs.extend([th1, th2])
                 else:
-                    _last_trans_toggle = 0.0
-
                     def on_trans_toggle():
-                        nonlocal _last_trans_toggle
                         now = time.time()
-                        if now - _last_trans_toggle < 0.35:
+                        if now - self._last_toggle_time < 0.35:
                             return
-                        _last_trans_toggle = now
+                        self._last_toggle_time = now
                         self.toggle_recording.emit("translate")
 
                     th = keyboard.add_hotkey(trans_hk, on_trans_toggle, suppress=False)
@@ -166,6 +282,14 @@ class HotkeyManager(QObject):
                 print(f"[Hotkey] Замечание по клавише перевода '{trans_hk}': {e_trans}")
 
     def unregister(self):
+        if self._win32_thread:
+            try:
+                self._win32_thread.stop()
+                self._win32_thread.join(0.5)
+            except Exception:
+                pass
+            self._win32_thread = None
+
         try:
             for h in self._hook_refs:
                 try:

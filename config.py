@@ -35,8 +35,8 @@ DEFAULT_CONFIG = {
     "overlay_custom_pos": None,       # [x, y] при ручном перетаскивании
     "vad_filter": True,               # Фильтр пауз и тишины (Silero VAD)
     "fast_lang_detect": True,         # Быстрое определение языка без задержки
-    "noise_gate": True,               # Шумоподавление фонового шума
-    "noise_gate_level": "medium",     # "soft" (0.005), "medium" (0.009), "aggressive" (0.016)
+    "noise_gate": False,              # Шумоподавление фонового шума (по умолчанию отключено для чистоты тихой речи)
+    "noise_gate_level": "soft",       # "soft" (0.0015), "medium" (0.003), "aggressive" (0.006)
     "input_device_index": None,       # None - микрофон по умолчанию Windows
     "start_minimized": False,         # Запускаться свернутым в трей
     "show_console": False             # Показать/скрыть окно консоли Windows

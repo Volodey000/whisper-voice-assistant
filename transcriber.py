@@ -179,6 +179,28 @@ class WhisperEngine:
         detected_lang = info.language
         lang_prob = info.language_probability
 
+        # Отказоустойчивый резерв: если VAD отфильтровал аудио как тишину, но аудио длилось >= 0.4 сек,
+        # выполняем автоматический повторный проход без VAD, чтобы тихая речь пользователя не потерялась.
+        if not full_text and vad_enabled and len(audio_data) >= 6400:
+            print("[WhisperEngine] VAD отфильтровал фрагмент как тишину. Резервный проход без VAD...")
+            try:
+                segments_fallback, info_fallback = model.transcribe(
+                    audio_data,
+                    language=lang_param,
+                    task=task,
+                    beam_size=5,
+                    vad_filter=False,
+                    **extra_kwargs
+                )
+                texts_fallback = [s.text.strip() for s in segments_fallback if s.text.strip()]
+                if texts_fallback:
+                    full_text = " ".join(texts_fallback).strip()
+                    detected_lang = info_fallback.language
+                    lang_prob = info_fallback.language_probability
+                    print(f"[WhisperEngine] Речь успешно распознана без VAD: '{full_text}'")
+            except Exception as e_fallback:
+                print(f"[WhisperEngine] Ошибка резервного прохода без VAD: {e_fallback}")
+
         return full_text, detected_lang, lang_prob
 
     def transcribe_file(self, file_path: str, language: str = None, progress_callback=None) -> tuple[str, list[dict], str]:
