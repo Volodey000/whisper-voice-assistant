@@ -35,73 +35,54 @@ exit /b %EXIT_CODE%
 set "SYS_PY="
 
 :: Проверка стандартного Windows лаунчера py на версии 3.11, 3.12, 3.10
-where py >nul 2>nul
-if not errorlevel 1 (
-    py -3.11 -c "%VER_CHECK%" >nul 2>nul
-    if not errorlevel 1 set "SYS_PY=py -3.11"
-    if not defined SYS_PY (
-        py -3.12 -c "%VER_CHECK%" >nul 2>nul
-        if not errorlevel 1 set "SYS_PY=py -3.12"
-    )
-    if not defined SYS_PY (
-        py -3.10 -c "%VER_CHECK%" >nul 2>nul
-        if not errorlevel 1 set "SYS_PY=py -3.10"
-    )
-)
+where py >nul 2>nul || goto :skip_py
+py -3.11 -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=py -3.11"
+if defined SYS_PY goto :run_app
+py -3.12 -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=py -3.12"
+if defined SYS_PY goto :run_app
+py -3.10 -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=py -3.10"
+if defined SYS_PY goto :run_app
 
+:skip_py
 :: Проверка команды python в системном PATH
-if not defined SYS_PY (
-    where python >nul 2>nul
-    if not errorlevel 1 (
-        python -c "%VER_CHECK%" >nul 2>nul
-        if not errorlevel 1 set "SYS_PY=python"
-    )
-)
+where python >nul 2>nul && python -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=python"
+if defined SYS_PY goto :run_app
 
 :: Поиск по стандартным каталогам установки
-if not defined SYS_PY (
-    for %%D in (
-        "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
-        "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-        "%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
-        "%ProgramFiles%\Python311\python.exe"
-        "%ProgramFiles%\Python312\python.exe"
-        "%ProgramFiles%\Python310\python.exe"
-        "C:\Program Files\Python311\python.exe"
-        "C:\Program Files\Python312\python.exe"
-        "C:\Program Files\Python310\python.exe"
-        "C:\Python311\python.exe"
-        "C:\Python312\python.exe"
-        "C:\Python310\python.exe"
-    ) do (
-        if exist %%D if not defined SYS_PY (
-            %%D -c "%VER_CHECK%" >nul 2>nul
-            if not errorlevel 1 set "SYS_PY=%%~D"
-        )
+for %%D in (
+    "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
+    "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+    "%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
+    "%ProgramFiles%\Python311\python.exe"
+    "%ProgramFiles%\Python312\python.exe"
+    "%ProgramFiles%\Python310\python.exe"
+    "C:\Program Files\Python311\python.exe"
+    "C:\Program Files\Python312\python.exe"
+    "C:\Program Files\Python310\python.exe"
+    "C:\Python311\python.exe"
+    "C:\Python312\python.exe"
+    "C:\Python310\python.exe"
+) do (
+    if exist %%D if not defined SYS_PY (
+        %%D -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=%%~D"
     )
 )
+if defined SYS_PY goto :run_app
 
 :: Поиск в реестре Windows (HKCU)
-if not defined SYS_PY (
-    for /f "tokens=2*" %%A in ('reg query "HKCU\Software\Python\PythonCore" /s /v ExecutablePath 2^>nul ^| findstr /i "ExecutablePath"') do (
-        if exist "%%~B" if not defined SYS_PY (
-            "%%~B" -c "%VER_CHECK%" >nul 2>nul
-            if not errorlevel 1 set "SYS_PY=%%~B"
-        )
+for /f "tokens=2*" %%A in ('reg query "HKCU\Software\Python\PythonCore" /s /v ExecutablePath 2^>nul ^| findstr /i "ExecutablePath"') do (
+    if exist "%%~B" if not defined SYS_PY (
+        "%%~B" -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=%%~B"
     )
 )
+if defined SYS_PY goto :run_app
 
 :: Поиск в реестре Windows (HKLM)
-if not defined SYS_PY (
-    for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore" /s /v ExecutablePath 2^>nul ^| findstr /i "ExecutablePath"') do (
-        if exist "%%~B" if not defined SYS_PY (
-            "%%~B" -c "%VER_CHECK%" >nul 2>nul
-            if not errorlevel 1 set "SYS_PY=%%~B"
-        )
+for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore" /s /v ExecutablePath 2^>nul ^| findstr /i "ExecutablePath"') do (
+    if exist "%%~B" if not defined SYS_PY (
+        "%%~B" -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=%%~B"
     )
 )
-
-:: Если совместимый Python уже найден — переходим к запуску
 if defined SYS_PY goto :run_app
 
 :: 3. Если совместимый Python не найден — автоматическая загрузка и установка Python 3.11.9 x64
@@ -129,7 +110,7 @@ powershell -NoProfile -Command "Start-Process -FilePath '%TEMP%\python-3.11.9-am
 del /f /q "%TEMP%\python-3.11.9-amd64.exe" 2>nul
 
 if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
-    set "SYS_PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
+    "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
 )
 if not defined SYS_PY (
     for /f "tokens=2*" %%A in ('reg query "HKCU\Software\Python\PythonCore\3.11\InstallPath" /ve 2^>nul ^| findstr /i "REG_SZ"') do (
@@ -137,11 +118,7 @@ if not defined SYS_PY (
     )
 )
 if not defined SYS_PY (
-    where py >nul 2>nul
-    if not errorlevel 1 (
-        py -3.11 -c "%VER_CHECK%" >nul 2>nul
-        if not errorlevel 1 set "SYS_PY=py -3.11"
-    )
+    where py >nul 2>nul && py -3.11 -c "%VER_CHECK%" >nul 2>nul && set "SYS_PY=py -3.11"
 )
 if not defined SYS_PY (
     for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore\3.11\InstallPath" /ve 2^>nul ^| findstr /i "REG_SZ"') do (
