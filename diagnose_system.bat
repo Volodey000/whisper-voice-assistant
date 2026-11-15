@@ -68,6 +68,26 @@ if not defined RUN_PY (
     )
 )
 
+:: Поиск в реестре Windows (HKCU)
+if not defined RUN_PY (
+    for /f "tokens=2*" %%A in ('reg query "HKCU\Software\Python\PythonCore" /s /v ExecutablePath 2^>nul ^| findstr /i "ExecutablePath"') do (
+        if exist "%%~B" if not defined RUN_PY (
+            "%%~B" -c "%VER_CHECK%" >nul 2>nul
+            if not errorlevel 1 set "RUN_PY=%%~B"
+        )
+    )
+)
+
+:: Поиск в реестре Windows (HKLM)
+if not defined RUN_PY (
+    for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore" /s /v ExecutablePath 2^>nul ^| findstr /i "ExecutablePath"') do (
+        if exist "%%~B" if not defined RUN_PY (
+            "%%~B" -c "%VER_CHECK%" >nul 2>nul
+            if not errorlevel 1 set "RUN_PY=%%~B"
+        )
+    )
+)
+
 if defined RUN_PY goto :found_python
 
 echo [ОШИБКА] Совместимый Python 3.10, 3.11 или 3.12 (64-bit) не найден!
@@ -75,11 +95,13 @@ echo ========================================================
 echo Для работы Whisper Voice Assistant необходим Python 3.10, 3.11 или 3.12 (64-bit).
 echo (Сверхновые версии Python 3.13-3.15 или 32-bit не поддерживаются библиотеками ИИ).
 echo.
-echo Пожалуйста, установите официальный Python 3.11.9 (64-bit):
-echo https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
+echo Решение:
+echo 1. Просто запустите "start_whisper.bat" — он САМ автоматически
+echo    скачает и установит официальный Python 3.11 (64-bit) в тихом режиме!
 echo.
-echo При установке обязательно включите галочку внизу:
-echo [x] Add python.exe to PATH
+echo Или установите вручную с официального сайта:
+echo https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
+echo (при ручной установке обязательно отметьте [x] Add python.exe to PATH)
 echo ========================================================
 echo.
 pause

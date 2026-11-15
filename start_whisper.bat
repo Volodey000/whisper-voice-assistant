@@ -101,19 +101,66 @@ if not defined SYS_PY (
     )
 )
 
-:: 3. Если совместимый Python 3.10-3.12 (64-bit) не найден
+:: 3. Если совместимый Python не найден — автоматическая загрузка и установка Python 3.11.9 x64
 if not defined SYS_PY (
     echo.
     echo ========================================================
-    echo  [ОШИБКА] Совместимая версия Python не найдена!
+    echo  [АВТОМАТИЧЕСКАЯ УСТАНОВКА PYTHON 3.11]
     echo ========================================================
-    echo  Для работы нейросетей Whisper и PyTorch требуется строго:
-    echo  Python 3.10, 3.11 или 3.12 (64-bit).
+    echo  Совместимый Python (3.10-3.12 64-bit) не обнаружен.
+    echo  Для работы нейросетей Whisper и PyTorch требуется Python 3.11 (64-bit).
     echo.
-    echo  (Сверхновые версии вроде Python 3.13-3.15 или 32-bit версии
-    echo   не поддерживаются библиотеками CTranslate2 и PyTorch).
+    echo  [1/2] Загрузка официального установщика Python 3.11.9 с python.org...
+    set "PY_INSTALLER=%TEMP%\python-3.11.9-amd64.exe"
+
+    if exist "%SystemRoot%\System32\curl.exe" (
+        "%SystemRoot%\System32\curl.exe" -fSL --progress-bar -o "%TEMP%\python-3.11.9-amd64.exe" "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+    ) else (
+        powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe', '%TEMP%\python-3.11.9-amd64.exe')"
+    )
+
+    if not exist "%TEMP%\python-3.11.9-amd64.exe" goto :install_failed
+
     echo.
-    echo  Пожалуйста, установите официальный Python 3.11.9 (64-bit):
+    echo  [2/2] Тихая установка Python 3.11.9 (без прав администратора)...
+    powershell -NoProfile -Command "Start-Process -FilePath '%TEMP%\python-3.11.9-amd64.exe' -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_test=0 SimpleInstall=1' -Wait"
+    del /f /q "%TEMP%\python-3.11.9-amd64.exe" 2>nul
+
+    if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+        set "SYS_PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
+    )
+    if not defined SYS_PY (
+        for /f "tokens=2*" %%A in ('reg query "HKCU\Software\Python\PythonCore\3.11\InstallPath" /ve 2^>nul ^| findstr /i "REG_SZ"') do (
+            if exist "%%~B\python.exe" set "SYS_PY=%%~B\python.exe"
+        )
+    )
+    if not defined SYS_PY (
+        where py >nul 2>nul
+        if not errorlevel 1 (
+            py -3.11 -c "%VER_CHECK%" >nul 2>nul
+            if not errorlevel 1 set "SYS_PY=py -3.11"
+        )
+    )
+    if not defined SYS_PY (
+        for /f "tokens=2*" %%A in ('reg query "HKLM\Software\Python\PythonCore\3.11\InstallPath" /ve 2^>nul ^| findstr /i "REG_SZ"') do (
+            if exist "%%~B\python.exe" set "SYS_PY=%%~B\python.exe"
+        )
+    )
+
+    if defined SYS_PY (
+        echo.
+        echo  [УСПЕХ] Python 3.11.9 (64-bit) успешно установлен!
+        echo ========================================================
+        echo.
+        goto :run_app
+    )
+
+    :install_failed
+    echo.
+    echo ========================================================
+    echo  [ОШИБКА] Автоматическая установка не удалась!
+    echo ========================================================
+    echo  Пожалуйста, установите официальный Python 3.11.9 (64-bit) вручную:
     echo  https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe
     echo.
     echo  При установке ОБЯЗАТЕЛЬНО включите галочку внизу:
@@ -124,6 +171,7 @@ if not defined SYS_PY (
     exit /b 1
 )
 
+:run_app
 :: 4. Запуск приложения (самоинициализация .venv встроена в main.py)
 echo [Инфо] Запуск Whisper Voice Assistant через %SYS_PY%...
 %SYS_PY% main.py %*

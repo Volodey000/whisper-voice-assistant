@@ -58,7 +58,7 @@ def check_python_version_and_arch() -> bool:
         print(" Для работы нейросетей Faster-Whisper, CTranslate2 и PyTorch требуется:")
         print(" Строго Python 3.10, 3.11 или 3.12 (64-bit).")
         if ver.minor >= 13:
-            print(" -> Python 3.13 пока не поддерживается библиотеками onnxruntime и ctranslate2.")
+            print(f" -> Python 3.{ver.minor} пока не поддерживается библиотеками onnxruntime, torch и ctranslate2.")
         if not is_64bit:
             print(" -> 32-битный Python не поддерживается библиотеками PyTorch и Faster-Whisper.")
         print("\n Пожалуйста, установите официальный Python 3.11.9 (64-bit):")
