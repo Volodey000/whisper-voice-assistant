@@ -51,6 +51,9 @@ class WhisperEngine:
             return self.model
 
         from faster_whisper import WhisperModel
+        import faster_whisper.utils
+        from tqdm.auto import tqdm
+        faster_whisper.utils.disabled_tqdm = tqdm
 
         target_path_or_name, is_local = get_local_model_target(model_name)
         download_dest = os.path.join(MODELS_DIR, model_name)

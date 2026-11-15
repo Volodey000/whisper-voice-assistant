@@ -278,7 +278,18 @@ class RecordingOverlay(QWidget):
         self.dot.set_color("#3b82f6")
         self.btn_cancel.setVisible(False)
 
-        if task == "translate":
+        from transcriber import whisper_engine, get_local_model_target
+        cfg_model = config.get("model_name", "auto")
+        target_name = "large-v3-turbo" if cfg_model == "auto" else cfg_model
+        _, is_local = get_local_model_target(target_name)
+
+        if whisper_engine.model is None and not is_local:
+            self.text_label.setText("Загрузка модели ИИ")
+            self.sub_label.setText("Скачивание весов (~1.5 ГБ)...")
+        elif whisper_engine.model is None:
+            self.text_label.setText("Инициализация")
+            self.sub_label.setText("Загрузка модели в память...")
+        elif task == "translate":
             self.text_label.setText("Перевод")
             self.sub_label.setText("Whisper → English")
         else:
