@@ -157,8 +157,8 @@ def _win32_set_clipboard_text(text: str) -> bool:
 def copy_to_clipboard(text: str) -> bool:
     """
     Многоуровневый каскад копирования текста в буфер обмена Windows:
-    1. Нативный Qt Clipboard (если запущен GUI) с мгновенным синхронным коммитом.
-    2. Прямой вызов 64-битного Win32 API (OpenClipboard + CF_UNICODETEXT) для гарантированного обновления буфера Windows ОС.
+    1. Прямой вызов 64-битного Win32 API (OpenClipboard + CF_UNICODETEXT) для гарантированной записи в буфер ОС.
+    2. Нативный Qt Clipboard для синхронизации с внутренними компонентами интерфейса.
     3. Резервный вызов pyperclip.copy().
     """
     if not text:
@@ -166,7 +166,14 @@ def copy_to_clipboard(text: str) -> bool:
 
     success = False
 
-    # Уровень 1: Qt Clipboard (синхронизация с циклом событий PyQt6)
+    # Уровень 1: Прямой 64-битный Win32 API (системный уровень Windows, доступен всем приложениям)
+    try:
+        if _win32_set_clipboard_text(text):
+            success = True
+    except Exception as e_win32:
+        print(f"[Clipboard] Win32 Clipboard info: {e_win32}")
+
+    # Уровень 2: Синхронизация с Qt Clipboard
     try:
         from PyQt6.QtWidgets import QApplication
         from PyQt6.QtGui import QClipboard
@@ -174,18 +181,9 @@ def copy_to_clipboard(text: str) -> bool:
         if app is not None and getattr(app, "platformName", lambda: "")() != "offscreen":
             cb = app.clipboard()
             cb.setText(text, QClipboard.Mode.Clipboard)
-            app.processEvents()
-            if cb.text(QClipboard.Mode.Clipboard) == text:
-                success = True
+            success = True
     except Exception as e_qt:
         print(f"[Clipboard] Qt Clipboard info: {e_qt}")
-
-    # Уровень 2: Прямой 64-битный Win32 API (гарантирует обновление системного буфера Windows для всех приложений)
-    try:
-        if _win32_set_clipboard_text(text):
-            success = True
-    except Exception as e_win32:
-        print(f"[Clipboard] Win32 Clipboard info: {e_win32}")
 
     # Уровень 3: Резервный вызов pyperclip
     if not success:

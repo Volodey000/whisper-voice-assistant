@@ -269,32 +269,50 @@ class VoiceAssistantApp:
         self.overlay.show_cancelled()
 
     def _on_transcription_finished(self, text: str, detected_lang: str, duration: float, task: str = "transcribe"):
-        clean_text = text.strip()
-        is_trans = (task == "translate")
+        try:
+            clean_text = text.strip() if text else ""
+            is_trans = (task == "translate")
 
-        if is_trans:
-            print(f"[App] Переведено ({detected_lang} -> EN): {clean_text}")
-        else:
-            print(f"[App] Распознано ({detected_lang}): {clean_text}")
+            if is_trans:
+                print(f"[App] Переведено ({detected_lang} -> EN): {clean_text}")
+            else:
+                print(f"[App] Распознано ({detected_lang}): {clean_text}")
 
-        if clean_text:
-            # 1. Всегда помещаем в буфер обмена Windows и (если разрешено) делаем Ctrl+V
-            handle_recognized_text(clean_text, target_hwnd=self.target_window_hwnd)
-            self.target_window_hwnd = None
+            if clean_text:
+                # 1. Всегда помещаем в буфер обмена Windows и (если разрешено) делаем Ctrl+V
+                try:
+                    handle_recognized_text(clean_text, target_hwnd=self.target_window_hwnd)
+                except Exception as e_paste:
+                    print(f"[App] Ошибка вставки текста: {e_paste}")
+                self.target_window_hwnd = None
 
-            # 2. Звук успешного завершения
-            play_success_sound()
+                # 2. Звук успешного завершения
+                try:
+                    play_success_sound()
+                except Exception:
+                    pass
 
-            # 3. Визуальный оверлей успеха
-            self.overlay.show_success(clean_text, is_translation=is_trans)
+                # 3. Визуальный оверлей успеха
+                try:
+                    self.overlay.show_success(clean_text, is_translation=is_trans)
+                except Exception as e_ov:
+                    print(f"[App] Ошибка оверлея: {e_ov}")
 
-            # 4. Добавляем в историю и обновляем UI
-            hist_lang = "EN (Перевод)" if is_trans else detected_lang
-            history.add_entry(clean_text, language=hist_lang, duration=duration)
-            self.main_window.display_latest_text(clean_text)
-        else:
-            print("[App] Речь не распознана (пустой результат распознавания).")
-            self.overlay.show_error("Речь не распознана", "Скажите фразу громче или проверьте микрофон")
+                # 4. Добавляем в историю и обновляем UI
+                try:
+                    hist_lang = "EN (Перевод)" if is_trans else detected_lang
+                    history.add_entry(clean_text, language=hist_lang, duration=duration)
+                    self.main_window.display_latest_text(clean_text)
+                except Exception as e_hist:
+                    print(f"[App] Ошибка добавления в историю/UI: {e_hist}")
+            else:
+                print("[App] Речь не распознана (пустой результат распознавания).")
+                try:
+                    self.overlay.show_error("Речь не распознана", "Скажите фразу громче или проверьте микрофон")
+                except Exception:
+                    self.overlay.hide_overlay()
+        except Exception as e_main:
+            print(f"[App] Ошибка обработки распознанного фрагмента: {e_main}")
 
     def _on_transcription_error(self, err_msg: str):
         print(f"[App] Ошибка распознавания: {err_msg}")
