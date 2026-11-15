@@ -15,6 +15,7 @@ def preload_system_msvc():
 
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     os.environ["OMP_NUM_THREADS"] = os.environ.get("OMP_NUM_THREADS", "4")
+    os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
     kernel32 = ctypes.windll.kernel32
     kernel32.LoadLibraryW.argtypes = [wintypes.LPCWSTR]
