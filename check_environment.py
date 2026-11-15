@@ -42,6 +42,32 @@ REQUIRED_PACKAGES = [
     ("numpy", "numpy>=1.24.0")
 ]
 
+def check_python_version_and_arch() -> bool:
+    """Проверяет, что запущенный Python является 64-битным и версии 3.10, 3.11 или 3.12."""
+    import struct
+    is_64bit = struct.calcsize("P") == 8
+    ver = sys.version_info
+    is_supported = is_64bit and (ver.major == 3 and 10 <= ver.minor <= 12)
+    if not is_supported:
+        arch_str = "64-bit" if is_64bit else "32-bit (x86)"
+        ver_str = f"{ver.major}.{ver.minor}.{ver.micro}"
+        print("=" * 60)
+        print(" [ОШИБКА] Несовместимая версия или разрядность Python!")
+        print("=" * 60)
+        print(f" Обнаружен: Python {ver_str} ({arch_str})")
+        print(" Для работы нейросетей Faster-Whisper, CTranslate2 и PyTorch требуется:")
+        print(" Строго Python 3.10, 3.11 или 3.12 (64-bit).")
+        if ver.minor >= 13:
+            print(" -> Python 3.13 пока не поддерживается библиотеками onnxruntime и ctranslate2.")
+        if not is_64bit:
+            print(" -> 32-битный Python не поддерживается библиотеками PyTorch и Faster-Whisper.")
+        print("\n Пожалуйста, установите официальный Python 3.11.9 (64-bit):")
+        print(" https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe")
+        print(" При установке обязательно включите галочку: [x] Add python.exe to PATH")
+        print("=" * 60)
+        return False
+    return True
+
 def check_vc_redist() -> bool:
     """Проверяет наличие системного пакета Microsoft Visual C++ 2015-2022 Redistributable."""
     if sys.platform != "win32":
@@ -344,6 +370,8 @@ def main():
     print("=" * 60)
     print(" [Whisper Voice Assistant] Диагностика и проверка компонентов")
     print("=" * 60)
+    if not check_python_version_and_arch():
+        return 1
     check_vc_redist()
     check_running_process()
     print("[Проверка] Проверка установленных библиотек...")

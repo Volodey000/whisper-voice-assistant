@@ -59,7 +59,10 @@ def _bootstrap_environment():
 
     # Внутри .venv проверяем обязательные пакеты (включая torch) ДО импорта PyQt6
     try:
-        from check_environment import check_missing_packages, install_packages, check_and_fix_audio_devices, ensure_app_icons_and_shortcut, check_models_availability, check_vc_redist
+        from check_environment import check_missing_packages, install_packages, check_and_fix_audio_devices, ensure_app_icons_and_shortcut, check_models_availability, check_vc_redist, check_python_version_and_arch
+        if not check_python_version_and_arch():
+            input("\nНажмите клавишу Enter для выхода...")
+            sys.exit(1)
         check_vc_redist()
         missing = check_missing_packages()
         if missing:
