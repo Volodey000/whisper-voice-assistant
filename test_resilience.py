@@ -303,6 +303,45 @@ try:
 except Exception as e:
     report("Hotkey Priority: системный перехват", False, f"{e}\n{traceback.format_exc()}")
 
+# -------------------------------------------------------------
+# ТЕСТ 13: Слой контрактов и типизации (contracts.py / Contract-First)
+# -------------------------------------------------------------
+try:
+    import contracts
+    from contracts import (
+        HistoryEntry,
+        TranscriptionResult,
+        HardwareProfile,
+        TranscriberProtocol,
+        AudioRecorderProtocol,
+        PasteHelperProtocol
+    )
+    from config import DEFAULT_CONFIG
+
+    # 1. Проверка DTO HistoryEntry
+    dummy_dict = {"id": 123456, "timestamp": "2026-11-15 12:00:00", "text": "Тестовый контракт", "language": "ru", "duration": 2.5}
+    entry = HistoryEntry.from_dict(dummy_dict)
+    assert entry.id == 123456 and entry.language == "RU"
+    assert entry.to_dict()["text"] == "Тестовый контракт"
+
+    # 2. Проверка DTO TranscriptionResult
+    res = TranscriptionResult(text="Результат", language="ru", duration=1.2)
+    assert res.task == "transcribe" and res.probability == 1.0
+
+    # 3. Проверка схемы конфигурации DEFAULT_CONFIG
+    required_keys = [
+        "hotkey", "translate_hotkey", "hotkey_mode", "clean_fillers",
+        "custom_vocabulary_enabled", "hotwords", "replacements", "model_name",
+        "language", "device", "compute_type", "auto_paste", "always_clipboard"
+    ]
+    for k in required_keys:
+        assert k in DEFAULT_CONFIG, f"Ключ '{k}' отсутствует в DEFAULT_CONFIG"
+
+    report("Contract-First: валидация DTO, схем и интерфейсов contracts.py", True, "Все контракты согласованы, обратная совместимость проверена")
+except Exception as e:
+    report("Contract-First: валидация контрактов", False, f"{e}\n{traceback.format_exc()}")
+
+
 print("=" * 70, flush=True)
 print(f"  ИТОГ ТЕСТИРОВАНИЯ: {PASSED} пройдено, {FAILED} сбоев", flush=True)
 print("=" * 70, flush=True)

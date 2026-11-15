@@ -176,6 +176,16 @@ class HotkeyManager(QObject):
         self._is_holding = False
         self._win32_thread = None
         self._last_toggle_time = 0.0
+        self._lock = threading.Lock()
+
+    def _safe_dispatch_toggle(self, task: str = "transcribe"):
+        """Потокобезопасный диспетчер с защитой от двойного срабатывания."""
+        with self._lock:
+            now = time.time()
+            if now - self._last_toggle_time < 0.40:
+                return
+            self._last_toggle_time = now
+        self.toggle_recording.emit(task)
 
     def setup(self):
         self.unregister()
@@ -188,7 +198,7 @@ class HotkeyManager(QObject):
         print(f"[Hotkey] Регистрация горячей клавиши диктовки: '{hotkey}' (режим: {mode})")
 
         # -------------------------------------------------------------
-        # УРОВЕНЬ 1: Win32 RegisterHotKey (Наивысший системный приоритет над всеми окнами)
+        # УРОВЕНЬ 1: Win32 RegisterHotKey (Системный перехват ОС)
         # -------------------------------------------------------------
         if mode == "toggle":
             hk_parsed = parse_hotkey_to_win32(hotkey)
@@ -202,12 +212,8 @@ class HotkeyManager(QObject):
 
             if win32_dict:
                 def _on_win32_hotkey(hid):
-                    now = time.time()
-                    if now - self._last_toggle_time < 0.35:
-                        return
-                    self._last_toggle_time = now
                     task = "translate" if hid == 2 else "transcribe"
-                    self.toggle_recording.emit(task)
+                    self._safe_dispatch_toggle(task)
 
                 self._win32_thread = Win32HotkeyThread(win32_dict, _on_win32_hotkey)
                 self._win32_thread.start()
@@ -219,34 +225,32 @@ class HotkeyManager(QObject):
                     print(f"[Hotkey] Приоритетный системный перехват RegisterHotKey для '{trans_hk}' активен.")
 
         # -------------------------------------------------------------
-        # УРОВЕНЬ 2: Low-level keyboard hook (Push-to-talk или резервный канал)
+        # УРОВЕНЬ 2: Low-Level Hook с SUPPRESS=TRUE (Абсолютный приоритет над другими приложениями)
         # -------------------------------------------------------------
+        # suppress=True блокирует передачу горячей клавиши другим приложениям (VS Code, браузеры, игры),
+        # гарантируя, что даже если в другом окне настроена такая же клавиша,
+        # событие перехватывается ИСКЛЮЧИТЕЛЬНО Whisper Voice Assistant!
         try:
             if mode == "hold":
                 # Режим рации (Push-to-talk)
                 def on_down(e):
-                    if not self._is_holding:
-                        self._is_holding = True
-                        self.start_recording.emit("transcribe")
+                    with self._lock:
+                        if not self._is_holding:
+                            self._is_holding = True
+                            self.start_recording.emit("transcribe")
 
                 def on_up(e):
-                    if self._is_holding:
-                        self._is_holding = False
-                        self.stop_recording.emit()
+                    with self._lock:
+                        if self._is_holding:
+                            self._is_holding = False
+                            self.stop_recording.emit()
 
-                h1 = keyboard.on_press_key(hotkey, on_down, suppress=False)
-                h2 = keyboard.on_release_key(hotkey, on_up, suppress=False)
+                h1 = keyboard.on_press_key(hotkey, on_down, suppress=True)
+                h2 = keyboard.on_release_key(hotkey, on_up, suppress=True)
                 self._hook_refs.extend([h1, h2])
             else:
-                # Резервный перехват для toggle режима
-                def on_toggle():
-                    now = time.time()
-                    if now - self._last_toggle_time < 0.35:
-                        return
-                    self._last_toggle_time = now
-                    self.toggle_recording.emit("transcribe")
-
-                h = keyboard.add_hotkey(hotkey, on_toggle, suppress=False)
+                # Перехват для toggle режима с подавлением для других приложений
+                h = keyboard.add_hotkey(hotkey, lambda: self._safe_dispatch_toggle("transcribe"), suppress=True)
                 self._hook_refs.append(h)
         except Exception as e:
             print(f"[Hotkey] Замечание по регистрации клавиши '{hotkey}': {e}")
@@ -256,27 +260,22 @@ class HotkeyManager(QObject):
             try:
                 if mode == "hold":
                     def on_trans_down(e):
-                        if not self._is_holding:
-                            self._is_holding = True
-                            self.start_recording.emit("translate")
+                        with self._lock:
+                            if not self._is_holding:
+                                self._is_holding = True
+                                self.start_recording.emit("translate")
 
                     def on_trans_up(e):
-                        if self._is_holding:
-                            self._is_holding = False
-                            self.stop_recording.emit()
+                        with self._lock:
+                            if self._is_holding:
+                                self._is_holding = False
+                                self.stop_recording.emit()
 
-                    th1 = keyboard.on_press_key(trans_hk, on_trans_down, suppress=False)
-                    th2 = keyboard.on_release_key(trans_hk, on_trans_up, suppress=False)
+                    th1 = keyboard.on_press_key(trans_hk, on_trans_down, suppress=True)
+                    th2 = keyboard.on_release_key(trans_hk, on_trans_up, suppress=True)
                     self._hook_refs.extend([th1, th2])
                 else:
-                    def on_trans_toggle():
-                        now = time.time()
-                        if now - self._last_toggle_time < 0.35:
-                            return
-                        self._last_toggle_time = now
-                        self.toggle_recording.emit("translate")
-
-                    th = keyboard.add_hotkey(trans_hk, on_trans_toggle, suppress=False)
+                    th = keyboard.add_hotkey(trans_hk, lambda: self._safe_dispatch_toggle("translate"), suppress=True)
                     self._hook_refs.append(th)
             except Exception as e_trans:
                 print(f"[Hotkey] Замечание по клавише перевода '{trans_hk}': {e_trans}")

@@ -3,6 +3,9 @@ import os
 import subprocess
 import ctypes
 
+# 0. Настройка CUDA и предварительная загрузка системного MSVC runtime ДО импортов любых библиотек
+import cuda_setup
+
 # Гарантируем поддержку UTF-8 в консоли Windows
 if sys.platform == "win32":
     try:

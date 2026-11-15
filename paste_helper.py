@@ -248,8 +248,11 @@ def restore_target_focus(hwnd):
     except Exception as e:
         print(f"[Focus] Восстановление фокуса окна: {e}")
 
-def _send_ctrl_v_sendinput() -> bool:
-    """Атомарная отправка Ctrl+V через SendInput."""
+def _send_ctrl_v_sendinput() -> tuple[bool, int]:
+    """
+    Атомарная отправка Ctrl+V через SendInput.
+    Возвращает (success: bool, count_sent: int).
+    """
     try:
         sc_ctrl = user32.MapVirtualKeyW(VK_CONTROL, 0) or 29
         sc_v = user32.MapVirtualKeyW(VK_V, 0) or 47
@@ -281,9 +284,9 @@ def _send_ctrl_v_sendinput() -> bool:
         events[3].u.ki.dwFlags = KEYEVENTF_KEYUP
 
         sent = user32.SendInput(4, events, ctypes.sizeof(INPUT))
-        return sent == 4
+        return (sent == 4), sent
     except Exception:
-        return False
+        return False, 0
 
 def _send_ctrl_v_keybd_event():
     """Резервная отправка Ctrl+V через keybd_event."""
@@ -310,7 +313,7 @@ def simulate_paste(target_hwnd=None):
     1. Восстанавливает фокус в окне, где стоял курсор.
     2. Ожидает физического отпускания пользователем клавиш горячей клавиши.
     3. Снимает любое виртуальное зажатие модификаторов (Alt, Shift, Ctrl).
-    4. Отправляет атомарную связку Ctrl+V (SendInput с fallback на keybd_event).
+    4. Отправляет атомарную связку Ctrl+V (SendInput с безопасным fallback).
     """
     try:
         # 1. Восстанавливаем фокус в окно пользователя (если окно потеряло фокус)
@@ -325,8 +328,10 @@ def simulate_paste(target_hwnd=None):
         time.sleep(0.025)
 
         # 4. Пробуем современный атомарный SendInput
-        if not _send_ctrl_v_sendinput():
-            # Резервный путь: классический keybd_event
+        success_sendinput, count_sent = _send_ctrl_v_sendinput()
+        if not success_sendinput and count_sent == 0:
+            # Fallback на keybd_event запускается СТРОГО если SendInput не отправил ни одного события (0).
+            # Это на 100% исключает двойную вставку текста!
             _send_ctrl_v_keybd_event()
 
         # 5. Финальное подтверждение снятия зажатия
@@ -348,8 +353,8 @@ def handle_recognized_text(text: str, target_hwnd=None) -> bool:
     cleaned_text = text.strip()
     now = time.time()
 
-    # Защита от дублей: если тот же текст вызывается быстрее чем за 0.35 сек
-    if cleaned_text == _last_pasted_text and (now - _last_paste_time < 0.35):
+    # Защита от дублей: если тот же текст вызывается быстрее чем за 0.8 сек
+    if cleaned_text == _last_pasted_text and (now - _last_paste_time < 0.8):
         print("[Paste] Повторный вызов вставки дублирующего текста пропущен (debounce).")
         return False
 

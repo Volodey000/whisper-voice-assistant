@@ -15,6 +15,14 @@ if sys.platform == "win32":
         pass
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT_DIR)
+
+# Настройка CUDA и загрузка системного MSVC runtime ДО импорта PyQt6/torch
+try:
+    import cuda_setup
+except Exception:
+    pass
+
 VENV_DIR = os.path.join(PROJECT_DIR, ".venv")
 VENV_PY = os.path.join(VENV_DIR, "Scripts", "python.exe")
 
