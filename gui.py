@@ -451,7 +451,7 @@ class MainWindow(QMainWindow):
 
         self.resize(init_w, init_h)
         # Разрешаем свободно масштабировать окно (уменьшать/увеличивать) по высоте и ширине
-        self.setMinimumSize(500, 360)
+        self.setMinimumSize(640, 380)
 
         # Центрируем окно на экране
         if screen:
@@ -510,6 +510,55 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tab_files, "Файлы")
         self.tabs.addTab(self.tab_settings, "Настройки")
 
+        # Верхняя панель управления треем (чекбокс + кнопка в правом углу вкладок под плашкой оборудования)
+        corner_widget = QWidget(self.tabs)
+        corner_layout = QHBoxLayout(corner_widget)
+        corner_layout.setContentsMargins(0, 0, 4, 2)
+        corner_layout.setSpacing(10)
+
+        self.chk_start_minimized = QCheckBox("Запускать свернутым в трей", corner_widget)
+        self.chk_start_minimized.setToolTip("Если включено, при запуске программа будет сразу сворачиваться в системный трей")
+        self.chk_start_minimized.setStyleSheet("""
+            QCheckBox {
+                color: #52525b;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QCheckBox:hover {
+                color: #18181b;
+            }
+        """)
+        self.chk_start_minimized.toggled.connect(self._on_start_minimized_toggled)
+
+        self.btn_minimize_tray = QPushButton(" Свернуть в трей", corner_widget)
+        self.btn_minimize_tray.setIcon(get_tray_minimize_icon())
+        self.btn_minimize_tray.setToolTip("Свернуть главное окно в область уведомлений (системный трей)")
+        self.btn_minimize_tray.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                border: 1px solid #e4e4e7;
+                border-radius: 6px;
+                color: #18181b;
+                font-size: 12px;
+                font-weight: 500;
+                padding: 4px 12px;
+            }
+            QPushButton:hover {
+                background-color: #f4f4f5;
+                border: 1px solid #d4d4d8;
+                color: #09090b;
+            }
+            QPushButton:pressed {
+                background-color: #e4e4e7;
+                border: 1px solid #cbd5e1;
+            }
+        """)
+        self.btn_minimize_tray.clicked.connect(self.minimize_to_tray)
+
+        corner_layout.addWidget(self.chk_start_minimized)
+        corner_layout.addWidget(self.btn_minimize_tray)
+        self.tabs.setCornerWidget(corner_widget, Qt.Corner.TopRightCorner)
+
         main_layout.addWidget(self.tabs)
 
         # Подвал
@@ -518,16 +567,10 @@ class MainWindow(QMainWindow):
         footer_layout.setSpacing(10)
         hotkey_str = format_hotkey_display(config.get("hotkey", "ctrl+`"))
         trans_hk_str = format_hotkey_display(config.get("translate_hotkey", "alt+`"))
-        self.hotkey_hint = QLabel(f"Диктовка: {hotkey_str} • Перевод (RU -> EN): {trans_hk_str}. Копируется в буфер.", self)
+        self.hotkey_hint = QLabel(f"Диктовка: {hotkey_str} • Перевод (RU -> EN): {trans_hk_str}. Текст в буфере.", self)
         self.hotkey_hint.setWordWrap(True)
         self.hotkey_hint.setStyleSheet("color: #71717a; font-size: 12px;")
         footer_layout.addWidget(self.hotkey_hint, 1)
-
-        btn_minimize_tray = QPushButton(" Свернуть в трей", self)
-        btn_minimize_tray.setIcon(get_tray_minimize_icon())
-        btn_minimize_tray.setToolTip("Свернуть главное окно в область уведомлений (системный трей)")
-        btn_minimize_tray.clicked.connect(self.minimize_to_tray)
-        footer_layout.addWidget(btn_minimize_tray, 0)
 
         main_layout.addLayout(footer_layout)
 
@@ -1089,6 +1132,11 @@ class MainWindow(QMainWindow):
         self.chk_autostart = QCheckBox("Запускать автоматически при входе в Windows (автозапуск)", self)
         b_layout.addWidget(self.chk_autostart)
 
+        self.chk_start_minimized_settings = QCheckBox("Запускать свернутым в системный трей", self)
+        self.chk_start_minimized_settings.setToolTip("Если включено, при запуске программа будет сразу сворачиваться в системный трей")
+        self.chk_start_minimized_settings.toggled.connect(self._on_start_minimized_toggled)
+        b_layout.addWidget(self.chk_start_minimized_settings)
+
         self.chk_console = QCheckBox("Показывать окно консоли Windows", self)
         self.chk_console.setToolTip("Если отключено, окно консоли будет скрыто")
         self.chk_console.toggled.connect(self._on_console_toggled)
@@ -1221,6 +1269,15 @@ class MainWindow(QMainWindow):
                 break
 
         self.chk_autostart.setChecked(autostart.is_autostart_enabled())
+        is_start_min = config.get("start_minimized", False)
+        if hasattr(self, 'chk_start_minimized'):
+            self.chk_start_minimized.blockSignals(True)
+            self.chk_start_minimized.setChecked(is_start_min)
+            self.chk_start_minimized.blockSignals(False)
+        if hasattr(self, 'chk_start_minimized_settings'):
+            self.chk_start_minimized_settings.blockSignals(True)
+            self.chk_start_minimized_settings.setChecked(is_start_min)
+            self.chk_start_minimized_settings.blockSignals(False)
         self.chk_console.blockSignals(True)
         self.chk_console.setChecked(config.get("show_console", False))
         self.chk_console.blockSignals(False)
@@ -1292,9 +1349,23 @@ class MainWindow(QMainWindow):
         else:
             autostart.disable_autostart()
 
+        if hasattr(self, 'chk_start_minimized'):
+            config.set("start_minimized", self.chk_start_minimized.isChecked())
+
         self.sync_settings_ui()
         self.settings_saved.emit()
         QMessageBox.information(self, "Настройки", "Параметры сохранены.")
+
+    def _on_start_minimized_toggled(self, checked: bool):
+        if hasattr(self, 'chk_start_minimized'):
+            self.chk_start_minimized.blockSignals(True)
+            self.chk_start_minimized.setChecked(checked)
+            self.chk_start_minimized.blockSignals(False)
+        if hasattr(self, 'chk_start_minimized_settings'):
+            self.chk_start_minimized_settings.blockSignals(True)
+            self.chk_start_minimized_settings.setChecked(checked)
+            self.chk_start_minimized_settings.blockSignals(False)
+        config.set("start_minimized", checked)
 
     def _on_console_toggled(self, checked: bool):
         set_console_visible(checked)
